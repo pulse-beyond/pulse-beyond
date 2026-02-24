@@ -1,4 +1,6 @@
 import { getIssues, createIssue } from "@/lib/actions/issues";
+
+export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import {
   Card,
