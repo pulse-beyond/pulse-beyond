@@ -1,0 +1,72 @@
+import { getIssues, createIssue } from "@/lib/actions/issues";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { PenLine } from "lucide-react";
+import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Create | Pulse Beyond",
+  description: "Build your weekly LinkedIn newsletter in a repeatable workflow",
+};
+
+export default async function CreatePage() {
+  const issues = await getIssues();
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary mt-0.5">
+            <PenLine className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Create</h1>
+            <p className="text-muted-foreground mt-0.5 text-sm">
+              Each issue is one Sunday edition of your Pulse Beyond newsletter.
+            </p>
+          </div>
+        </div>
+        <form action={createIssue}>
+          <Button type="submit">New Issue</Button>
+        </form>
+      </div>
+
+      {issues.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center text-muted-foreground">
+            No issues yet. Create your first one to get started.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {issues.map((issue) => (
+            <Link key={issue.id} href={`/issues/${issue.id}`}>
+              <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">{issue.title}</CardTitle>
+                    <Badge variant="outline">{issue.currentStep}</Badge>
+                  </div>
+                  <CardDescription>
+                    {issue._count.links} link{issue._count.links !== 1 ? "s" : ""}{" "}
+                    · {issue._count.events} event
+                    {issue._count.events !== 1 ? "s" : ""} · Created{" "}
+                    {new Date(issue.createdAt).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

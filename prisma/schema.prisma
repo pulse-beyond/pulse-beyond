@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Issue {
+  id        String   @id @default(cuid())
+  title     String   @default("Untitled Issue")
+  // Which Sunday this issue is for
+  publishDate DateTime?
+  // Current step in the workflow: "links" | "select" | "generate" | "events" | "shorten" | "export"
+  currentStep String  @default("links")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  links     LinkItem[]
+  events    EventItem[]
+  sections  GeneratedSection[]
+  exports   Export[]
+  images    GeneratedImage[]
+}
+
+model LinkItem {
+  id          String  @id @default(cuid())
+  issueId     String
+  url         String
+  // Fetched metadata
+  metaTitle   String?
+  metaDescription String?
+  // User-provided tone note
+  toneNote    String?
+  // Path to uploaded audio file (relative to public/uploads)
+  audioPath   String?
+  // Transcript of audio (TODO: implement transcription)
+  audioTranscript String?
+  // Whether this link was selected as one of the final 3
+  selected    Boolean @default(false)
+  // Shortened URL
+  shortUrl    String?
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  issue       Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  sections    GeneratedSection[]
+}
+
+model EventItem {
+  id          String  @id @default(cuid())
+  issueId     String
+  title       String
+  date        String
+  location    String
+  description String  // Short provocative description written as questions
+  included    Boolean @default(false) // Whether this event is included in the final newsletter
+  shortUrl    String?
+  sourceUrl   String?
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  issue       Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+model GeneratedSection {
+  id          String  @id @default(cuid())
+  issueId     String
+  linkItemId  String?
+  // "main" for the 3 article sections, "events" for the events block, "readmore" for links
+  sectionType String
+  // JSON-encoded content (title options array, why it matters, my thoughts, etc.)
+  content     String
+  // User-edited version of the content (if modified)
+  editedContent String?
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  issue       Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  linkItem    LinkItem? @relation(fields: [linkItemId], references: [id], onDelete: SetNull)
+  images      GeneratedImage[]
+}
+
+model Export {
+  id        String   @id @default(cuid())
+  issueId   String
+  format    String   @default("txt") // "txt" | "md"
+  content   String
+  createdAt DateTime @default(now())
+
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+model GeneratedImage {
+  id        String   @id @default(cuid())
+  issueId   String
+  sectionId String
+  prompt    String   // The full prompt sent to the image generation API
+  imageData String?  // Base64-encoded image data
+  mimeType  String?  // e.g. "image/png"
+  createdAt DateTime @default(now())
+
+  issue     Issue            @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  section   GeneratedSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+}
