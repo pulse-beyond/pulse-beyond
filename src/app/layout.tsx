@@ -7,8 +7,8 @@ import { SessionProvider } from "@/components/session-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Pulse Beyond",
-  description: "Build your weekly LinkedIn newsletter in a repeatable workflow",
+  title: "Snapshot Builder",
+  description: "Build your weekly LinkedIn newsletter in a repeatable workflow. Crafted by Pulse Beyond.",
 };
 
 export default function RootLayout({

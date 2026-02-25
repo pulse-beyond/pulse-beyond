@@ -7,8 +7,8 @@ import { fetchBrainDumpCards, getOpenIssues } from "@/lib/actions/brain-dump";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Brain Dump | Pulse Beyond",
-  description: "Curated articles to inspire your next newsletter issue",
+  title: "Brain Dump | Snapshot Builder",
+  description: "Curated articles to inspire your next Snapshot edition",
 };
 
 async function BrainDumpFeed() {

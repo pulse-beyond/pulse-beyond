@@ -16,8 +16,8 @@ import type { Metadata } from "next";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
 
 export const metadata: Metadata = {
-  title: "Create | Pulse Beyond",
-  description: "Build your weekly LinkedIn newsletter in a repeatable workflow",
+  title: "Create | Snapshot Builder",
+  description: "Build your weekly Snapshot edition",
 };
 
 export default async function CreatePage() {
@@ -33,19 +33,19 @@ export default async function CreatePage() {
           <div>
             <h1 className="text-2xl font-bold">Create</h1>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Each issue is one Sunday edition of your Pulse Beyond newsletter.
+              Each edition is one Sunday issue of the Weekly Snapshot newsletter.
             </p>
           </div>
         </div>
         <form action={createIssue}>
-          <Button type="submit">New Issue</Button>
+          <Button type="submit">New Edition</Button>
         </form>
       </div>
 
       {issues.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
-            No issues yet. Create your first one to get started.
+            No editions yet. Create your first one to get started.
           </CardContent>
         </Card>
       ) : (

@@ -5,7 +5,7 @@ import { PostTable } from "@/components/analytics/post-table";
 import { CsvUploadButton } from "@/components/analytics/csv-upload-button";
 
 export const metadata: Metadata = {
-  title: "Analytics | Pulse Beyond",
+  title: "Analytics | Snapshot Builder",
   description: "Track your LinkedIn newsletter performance over time",
 };
 

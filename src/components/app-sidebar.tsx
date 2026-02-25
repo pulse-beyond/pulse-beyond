@@ -19,9 +19,14 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
           <Zap className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="text-sm font-semibold text-foreground">
-          Pulse Beyond
-        </span>
+        <div>
+          <span className="text-sm font-semibold text-foreground leading-tight block">
+            Snapshot Builder
+          </span>
+          <span className="text-[10px] text-muted-foreground leading-tight">
+            by Pulse Beyond
+          </span>
+        </div>
         {/* Close button — mobile only */}
         {onClose && (
           <button
@@ -71,7 +76,7 @@ export function AppSidebar() {
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
             <Zap className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <span className="text-sm font-semibold">Pulse Beyond</span>
+          <span className="text-sm font-semibold">Snapshot Builder</span>
         </div>
         {/* Spacer to balance the hamburger button */}
         <div className="w-9" />

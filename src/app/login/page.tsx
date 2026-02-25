@@ -17,9 +17,9 @@ function LoginContent() {
           <Zap className="h-6 w-6 text-primary-foreground" />
         </div>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground">Pulse Beyond</h1>
+          <h1 className="text-2xl font-bold text-foreground">Snapshot Builder</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Newsletter builder for Roberto
+            Crafted by Pulse Beyond
           </p>
         </div>
       </div>
