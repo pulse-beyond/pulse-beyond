@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { PenLine } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { DeleteIssueButton } from "@/components/delete-issue-button";
 
 export const metadata: Metadata = {
   title: "Create | Pulse Beyond",
@@ -50,22 +51,32 @@ export default async function CreatePage() {
       ) : (
         <div className="space-y-3">
           {issues.map((issue) => (
-            <Link key={issue.id} href={`/issues/${issue.id}`}>
-              <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{issue.title}</CardTitle>
-                    <Badge variant="outline">{issue.currentStep}</Badge>
-                  </div>
-                  <CardDescription>
-                    {issue._count.links} link{issue._count.links !== 1 ? "s" : ""}{" "}
-                    · {issue._count.events} event
-                    {issue._count.events !== 1 ? "s" : ""} · Created{" "}
-                    {new Date(issue.createdAt).toLocaleDateString()}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
+            <div key={issue.id} className="relative group">
+              <Link href={`/issues/${issue.id}`}>
+                <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle className="text-lg">{issue.title}</CardTitle>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline">{issue.currentStep}</Badge>
+                        {/* Spacer so delete button doesn't overlap badge */}
+                        <div className="w-16" />
+                      </div>
+                    </div>
+                    <CardDescription>
+                      {issue._count.links} link{issue._count.links !== 1 ? "s" : ""}{" "}
+                      · {issue._count.events} event
+                      {issue._count.events !== 1 ? "s" : ""} · Created{" "}
+                      {new Date(issue.createdAt).toLocaleDateString()}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </Link>
+              {/* Delete button — absolute, outside Link so it doesn't navigate */}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <DeleteIssueButton issueId={issue.id} issueTitle={issue.title} />
+              </div>
+            </div>
           ))}
         </div>
       )}

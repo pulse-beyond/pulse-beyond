@@ -90,7 +90,7 @@ function EditionDropdown({ openIssues, cardUrl, onAdded }: EditionDropdownProps)
       </button>
 
       {open && (
-        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[200px] rounded-lg border bg-popover shadow-lg py-1">
+        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[200px] rounded-lg border bg-white shadow-xl py-1" style={{ backgroundColor: 'white' }}>
           <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Choose an edition
           </p>

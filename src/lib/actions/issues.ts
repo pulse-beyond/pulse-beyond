@@ -39,8 +39,9 @@ export async function setIssueStep(issueId: string, step: string) {
 /** Delete an issue */
 export async function deleteIssue(issueId: string) {
   await prisma.issue.delete({ where: { id: issueId } });
+  revalidatePath("/create");
   revalidatePath("/issues");
-  redirect("/issues");
+  redirect("/create");
 }
 
 /** Get all issues ordered by creation date */
