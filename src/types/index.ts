@@ -63,6 +63,27 @@ export const WORKFLOW_STEPS: { key: WorkflowStep; label: string }[] = [
   { key: "image", label: "Image" },
 ];
 
+// Brain Dump — card structure returned by GPT-4o web search
+export interface BrainDumpCard {
+  id: string; // slug generated from title
+  title: string; // punchy Roberto-style title
+  source: string; // e.g. "MIT Technology Review"
+  url: string; // original article URL
+  publishedAt: string; // e.g. "3 days ago"
+  topic: string; // primary topic e.g. "AI"
+  whyItMatters: string; // 2-3 sentences on strategic significance
+  robertosAngle: string; // how Roberto would frame this story
+  keyFacts: string[]; // 3 bullet points
+  topicTags: string[]; // e.g. ["AI", "China", "Geopolitics"]
+}
+
+// Open issue for Brain Dump "Add to Edition" dropdown
+export interface OpenIssue {
+  id: string;
+  title: string;
+  publishDate: string | null; // formatted date string
+}
+
 // Analytics — post performance data shape
 export interface PostAnalytic {
   date: string;

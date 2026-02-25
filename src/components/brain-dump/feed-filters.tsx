@@ -1,65 +1,66 @@
 "use client";
 
-import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { ArticleCard } from "@/components/brain-dump/article-card";
-
-const TOPICS = ["All", "Business", "Finance", "Leadership", "Tech"];
-
-interface Article {
-  title: string;
-  source: string;
-  url: string;
-  publishedAt: string;
-  readingTime?: string;
-  topic: string;
-  excerpt?: string;
-}
+import { useState, useMemo } from "react";
+import { ArticleCard } from "./article-card";
+import type { BrainDumpCard, OpenIssue } from "@/types/index";
 
 interface FeedFiltersProps {
-  articles: Article[];
+  cards: BrainDumpCard[];
+  openIssues: OpenIssue[];
 }
 
-export function FeedFilters({ articles }: FeedFiltersProps) {
+export function FeedFilters({ cards, openIssues }: FeedFiltersProps) {
   const [activeTopic, setActiveTopic] = useState("All");
 
-  const filtered =
-    activeTopic === "All"
-      ? articles
-      : articles.filter((a) => a.topic === activeTopic);
+  // Build unique topic list from all topicTags across cards
+  const topics = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const card of cards) {
+      for (const tag of card.topicTags) {
+        tagSet.add(tag);
+      }
+    }
+    return ["All", ...Array.from(tagSet).sort()];
+  }, [cards]);
+
+  const filtered = useMemo(() => {
+    if (activeTopic === "All") return cards;
+    return cards.filter((card) => card.topicTags.includes(activeTopic));
+  }, [cards, activeTopic]);
 
   return (
     <div className="space-y-6">
-      {/* Topic filter tabs */}
+      {/* Topic Filter Tabs */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        {TOPICS.map((topic) => (
+        {topics.map((topic) => (
           <button
             key={topic}
             onClick={() => setActiveTopic(topic)}
-            className={cn(
-              "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+            className={[
+              "px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors",
               activeTopic === topic
                 ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            )}
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+            ].join(" ")}
           >
             {topic}
           </button>
         ))}
+
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} article{filtered.length !== 1 ? "s" : ""}
+          {filtered.length} {filtered.length === 1 ? "story" : "stories"}
         </span>
       </div>
 
-      {/* Article grid */}
+      {/* Cards Grid */}
       {filtered.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          No articles for this topic yet.
-        </p>
+        <div className="py-16 text-center text-muted-foreground text-sm">
+          No stories found for &quot;{activeTopic}&quot;.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((article, idx) => (
-            <ArticleCard key={idx} {...article} />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map((card) => (
+            <ArticleCard key={card.id} card={card} openIssues={openIssues} />
           ))}
         </div>
       )}
