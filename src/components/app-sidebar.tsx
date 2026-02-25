@@ -2,9 +2,10 @@ import { Zap } from "lucide-react";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function AppSidebar() {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   return (
     <aside className="flex h-screen w-60 flex-shrink-0 flex-col border-r bg-sidebar">
