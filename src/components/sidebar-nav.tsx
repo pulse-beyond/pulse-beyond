@@ -29,7 +29,11 @@ const NAV_ITEMS = [
   },
 ];
 
-export function SidebarNav() {
+interface SidebarNavProps {
+  onClose?: () => void;
+}
+
+export function SidebarNav({ onClose }: SidebarNavProps) {
   const pathname = usePathname();
 
   return (
@@ -47,6 +51,7 @@ export function SidebarNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onClose}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors w-full",
               isActive
