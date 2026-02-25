@@ -1,7 +1,11 @@
 import { Zap } from "lucide-react";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { UserMenu } from "@/components/user-menu";
+import { getServerSession } from "next-auth";
 
-export function AppSidebar() {
+export async function AppSidebar() {
+  const session = await getServerSession();
+
   return (
     <aside className="flex h-screen w-60 flex-shrink-0 flex-col border-r bg-sidebar">
       {/* Logo */}
@@ -19,9 +23,13 @@ export function AppSidebar() {
         <SidebarNav />
       </div>
 
-      {/* Footer */}
-      <div className="border-t px-4 py-3">
-        <p className="text-[11px] text-muted-foreground">v0.1.0</p>
+      {/* User menu */}
+      <div className="border-t">
+        <UserMenu
+          name={session?.user?.name}
+          email={session?.user?.email}
+          image={session?.user?.image}
+        />
       </div>
     </aside>
   );
