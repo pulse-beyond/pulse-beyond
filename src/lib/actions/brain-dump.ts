@@ -44,6 +44,34 @@ EXCLUDE:
 TONE: Intellectually curious, never sensationalist. Global and multipolar. Analytically honest. Forward-looking.
 `.trim();
 
+// ─── Edition window: last Sunday → next Saturday ─────────────────────────────
+
+function getEditionWindow(): { start: Date; end: Date } {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+
+  // Last Sunday (or today if today is Sunday)
+  const start = new Date(now);
+  start.setDate(now.getDate() - dayOfWeek);
+  start.setHours(0, 0, 0, 0);
+
+  // Next Saturday
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+}
+
+function formatDateLong(d: Date): string {
+  return d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 // ─── Fetch cards using GPT-4o web search ─────────────────────────────────────
 
 export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
@@ -59,16 +87,26 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
     day: "numeric",
   });
 
+  const { start, end } = getEditionWindow();
+  const startStr = formatDateLong(start);
+  const endStr = formatDateLong(end);
+
   const prompt = `Today is ${today}.
 
 You are a specialized research assistant for Weekly Snapshot, a weekly newsletter written by Roberto.
 
-Your task: Search the web to find 12 to 15 of the most relevant, insightful, and timely news stories published in the LAST 7 DAYS. Apply the editorial DNA below to filter and frame each story.
+Your task: Search the web to find 12 to 15 of the most relevant, insightful, and timely news stories. Apply the editorial DNA below to filter and frame each story.
+
+STRICT DATE REQUIREMENT — THIS IS CRITICAL:
+Only include stories published between ${startStr} and ${endStr}.
+Do NOT include any story published before ${startStr}.
+If you cannot confirm a story was published within this exact date range, exclude it.
+Every story must be from this current week's edition window only.
 
 ${EDITORIAL_DNA}
 
 INSTRUCTIONS:
-- Search for real, recent stories (last 7 days only — no older articles)
+- Search for real, recent stories published between ${startStr} and ${endStr} ONLY
 - Cover at least 5 different topic areas from the list above
 - Prioritize Tier 1 sources when available
 - Include at least 2 stories from non-Western perspectives (China, India, Southeast Asia, Africa, Latin America, Middle East)
