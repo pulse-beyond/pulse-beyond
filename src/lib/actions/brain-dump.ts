@@ -175,7 +175,37 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
     throw new Error(`Could not find JSON array in response: ${rawText.slice(0, 500)}`);
   }
 
-  const cards: BrainDumpCard[] = JSON.parse(jsonMatch[0]);
+  let jsonStr = jsonMatch[0];
+
+  // Sanitize common GPT-4o JSON issues:
+  // 1. Replace curly/smart quotes with straight quotes
+  jsonStr = jsonStr
+    .replace(/[\u2018\u2019]/g, "'")   // ' '  → '
+    .replace(/[\u201C\u201D]/g, '"')   // " "  → "
+    .replace(/[\u2013\u2014]/g, "-");  // – —  → -
+
+  // 2. Try parsing; if it fails, extract as many valid cards as possible
+  let cards: BrainDumpCard[];
+  try {
+    cards = JSON.parse(jsonStr);
+  } catch {
+    // Attempt to salvage individual objects from a truncated/broken array
+    const objectMatches = jsonStr.match(/\{[\s\S]*?\}(?=\s*[,\]])/g);
+    if (!objectMatches || objectMatches.length === 0) {
+      throw new Error(`JSON parse failed and no salvageable objects found. Raw: ${jsonStr.slice(0, 500)}`);
+    }
+    cards = [];
+    for (const obj of objectMatches) {
+      try {
+        cards.push(JSON.parse(obj));
+      } catch {
+        // skip broken object
+      }
+    }
+    if (cards.length === 0) {
+      throw new Error("Could not parse any cards from GPT-4o response");
+    }
+  }
 
   // Ensure all cards have valid IDs
   return cards.map((card, i) => ({
