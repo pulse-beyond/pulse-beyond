@@ -63,7 +63,7 @@ export default async function IssuePage({ params }: Props) {
         )}
       </div>
 
-      <div className="flex gap-8">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-8">
         {/* Sidebar navigation */}
         <StepProgress
           steps={WORKFLOW_STEPS}
