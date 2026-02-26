@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { generateImage } from "@/lib/actions/image";
 import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,49 @@ interface Props {
   issueId: string;
   sections: SectionWithLink[];
   latestImage: GeneratedImage | null;
+}
+
+const LOADING_PHRASES = [
+  "🎨 Nosso artista digital está em transe criativo...",
+  "🖼️ Consultando Picasso, Dalí e o ChatGPT para inspiração...",
+  "✨ Transformando palavras em pixels mágicos...",
+  "🤖 A IA está escolhendo a paleta de cores com muito critério...",
+  "🌅 Gerando uma obra digna de capa de revista... quase lá!",
+  "🎭 Metáforas visuais sendo destiladas com carinho...",
+  "🔮 Cristalizando o conceito em imagem... isso demora um pouquinho!",
+  "🎬 Configurando câmera, luz e composição cinematográfica...",
+  "🧠 Claude pensou, DALL-E pintou... aguarda mais um segundo!",
+  "🌊 Deixa a criatividade fluir... ela tem o próprio ritmo!",
+];
+
+function useLoadingPhrase(active: boolean) {
+  const [phrase, setPhrase] = useState("");
+  const usedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!active) {
+      usedRef.current.clear();
+      return;
+    }
+
+    function pickPhrase() {
+      if (usedRef.current.size >= LOADING_PHRASES.length) {
+        usedRef.current.clear();
+      }
+      let idx: number;
+      do {
+        idx = Math.floor(Math.random() * LOADING_PHRASES.length);
+      } while (usedRef.current.has(idx));
+      usedRef.current.add(idx);
+      setPhrase(LOADING_PHRASES[idx]);
+    }
+
+    pickPhrase();
+    const interval = setInterval(pickPhrase, 4000);
+    return () => clearInterval(interval);
+  }, [active]);
+
+  return phrase;
 }
 
 function getSectionTitle(section: GeneratedSection): string {
@@ -42,6 +85,7 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
     latestImage?.mimeType || null
   );
   const [error, setError] = useState<string | null>(null);
+  const loadingPhrase = useLoadingPhrase(generating);
 
   async function handleGenerate() {
     if (!selectedSectionId) return;
@@ -62,32 +106,34 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
     if (!imageData || !mimeType) return;
     try {
       const byteCharacters = atob(imageData);
-      const byteNumbers = new Array(byteCharacters.length);
+      const byteArray = new Uint8Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+        byteArray[i] = byteCharacters.charCodeAt(i);
       }
-      const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: mimeType });
-      await navigator.clipboard.write([
-        new ClipboardItem({ [mimeType]: blob }),
-      ]);
+      await navigator.clipboard.write([new ClipboardItem({ [mimeType]: blob })]);
     } catch {
-      // Fallback: if clipboard write fails for the mime type, try as PNG
       try {
         const byteCharacters = atob(imageData);
-        const byteNumbers = new Array(byteCharacters.length);
+        const byteArray = new Uint8Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+          byteArray[i] = byteCharacters.charCodeAt(i);
         }
-        const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: "image/png" });
-        await navigator.clipboard.write([
-          new ClipboardItem({ "image/png": blob }),
-        ]);
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       } catch {
         setError("Could not copy image to clipboard.");
       }
     }
+  }
+
+  function handleDownload() {
+    if (!imageData || !mimeType) return;
+    const ext = mimeType.split("/")[1] || "png";
+    const link = document.createElement("a");
+    link.href = `data:${mimeType};base64,${imageData}`;
+    link.download = `snapshot-cover.${ext}`;
+    link.click();
   }
 
   return (
@@ -124,17 +170,31 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
       </div>
 
       {/* Generate button */}
-      <Button
-        onClick={handleGenerate}
-        disabled={!selectedSectionId || generating}
-      >
-        {generating ? "Generating..." : "Generate Image"}
+      <Button onClick={handleGenerate} disabled={!selectedSectionId || generating}>
+        {generating ? (
+          <span className="inline-flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Generating...
+          </span>
+        ) : imageData ? (
+          "Regenerate Image"
+        ) : (
+          "Generate Image"
+        )}
       </Button>
 
-      {/* Error message */}
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
+      {/* Loading phrase */}
+      {generating && (
+        <p className="text-sm font-medium text-primary animate-pulse">
+          {loadingPhrase}
+        </p>
       )}
+
+      {/* Error message */}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Image preview */}
       {imageData && mimeType && (
@@ -146,8 +206,9 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
               className="w-full rounded-lg"
             />
             <div className="flex gap-2">
-              <Button onClick={handleCopyImage}>
-                Copy Image
+              <Button onClick={handleCopyImage}>Copy Image</Button>
+              <Button variant="outline" onClick={handleDownload}>
+                Download
               </Button>
             </div>
           </CardContent>
@@ -156,10 +217,7 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
 
       {/* Navigation */}
       <div className="flex gap-3 pt-4">
-        <Button
-          variant="outline"
-          onClick={() => setIssueStep(issueId, "export")}
-        >
+        <Button variant="outline" onClick={() => setIssueStep(issueId, "export")}>
           Back
         </Button>
       </div>

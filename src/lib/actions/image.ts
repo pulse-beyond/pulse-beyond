@@ -4,20 +4,30 @@ import { prisma } from "@/lib/db";
 import type { MainSectionContent } from "@/types";
 import { revalidatePath } from "next/cache";
 
-const IMAGE_PROMPT_TEMPLATE = `You are an editorial visual concept designer.
-First, carefully analyze the following text and identify: – The central strategic theme – The underlying tension or conflict – The power dynamics involved – The emotional tone (e.g., optimism, risk, disruption, concentration, fragility, control)
-TEXT TO ANALYZE:
-{SECTION_TEXT}
+const CONCEPT_PROMPT_TEMPLATE = `You are an editorial visual concept designer for a high-end magazine (like The Economist or Bloomberg Businessweek).
 
-Based on this analysis, generate a single strong visual concept that symbolically represents the core idea of the text.
-The image should not literally illustrate the topic. Instead, it should use metaphor, symbolism, and high-level abstraction suitable for a magazine cover (e.g., The Economist, Financial Times, Bloomberg Businessweek).
-Choose a visual metaphor that best represents the theme. The composition, environment, and objects should emerge naturally from the meaning of the text — do not default to any predefined scene.
-The scene must be cinematic, hyper-realistic, and high-end editorial.
-The final output should describe one cohesive image scene including: – Main symbolic object or structure representing the core subject – Surrounding environment reflecting the power structure and market dynamics – Subtle secondary symbolic elements reinforcing the key tensions (risk, control, capital, regulation, disruption — as applicable to the text) – Lighting style and color palette aligned with the emotional tone
-No text, no logos, no brand names.
-Ultra-detailed, high dynamic range, cinematic depth of field, 8K resolution, magazine cover quality.
-Aspect ratio 16:9, wide frame composition.
-The mood should clearly communicate the dominant emotional tone you identified from the text.`;
+Read the following newsletter section carefully. Extract:
+1. The central theme or subject (e.g. AI regulation, market concentration, climate tech, geopolitics)
+2. The emotional tone (e.g. tension, optimism, disruption, fragility, power shift)
+3. Key players or forces involved (e.g. governments, corporations, technologies, markets)
+
+Then write a single DALL-E image prompt (max 800 characters) that:
+- Uses a concrete visual metaphor directly tied to the theme you extracted — do NOT use generic concepts
+- Looks like a real photograph — shot on a professional camera, natural lighting, documentary or editorial photography style
+- Feels grounded and real, NOT futuristic, digital, or illustrated — no glowing effects, no sci-fi aesthetics, no CGI look
+- Specifies lighting (e.g. golden hour, overcast, studio), color palette, and mood aligned with the emotional tone
+- Has NO text, logos, flags, faces, or brand names
+- Assumes a wide 16:9 frame, as if shot by a photojournalist for a magazine cover
+
+Examples of theme-to-metaphor mapping (for reference only — create your own based on the actual text):
+- AI regulation → a lone chess board on a government office desk, natural window light, documentary photography
+- Market crash → an empty trading floor at dusk, chairs overturned, warm late light casting long shadows
+- Climate finance → a dried riverbed with cracked earth beside a lush green field, shot on a 35mm lens
+
+Reply with ONLY the image prompt. No explanation, no preamble.
+
+SECTION:
+{SECTION_TEXT}`;
 
 /**
  * Build the full section text from a GeneratedSection's content
@@ -32,15 +42,15 @@ function buildSectionText(content: MainSectionContent): string {
 }
 
 /**
- * Generate an editorial cover image for a newsletter section using Google Gemini (Nano Banana).
+ * Generate an editorial cover image for a newsletter section using OpenAI DALL-E 3.
  */
 export async function generateImage(
   issueId: string,
   sectionId: string
 ): Promise<{ imageData: string; mimeType: string }> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set. Add it to your .env file.");
+    throw new Error("OPENAI_API_KEY is not set. Add it to your .env file.");
   }
 
   // Fetch the section
@@ -59,53 +69,70 @@ export async function generateImage(
   // Build the full text for the prompt
   const sectionText = buildSectionText(content);
 
-  // Build the full prompt
-  const prompt = IMAGE_PROMPT_TEMPLATE.replace("{SECTION_TEXT}", sectionText);
+  // Step 1: Use Claude to generate a concise DALL-E prompt from the section text
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY is not set.");
 
-  // Call Google Gemini API (Nano Banana)
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
+  const conceptResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": anthropicKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: CONCEPT_PROMPT_TEMPLATE.replace("{SECTION_TEXT}", sectionText),
         },
-      }),
-      signal: AbortSignal.timeout(120000), // 2 minute timeout for image generation
-    }
-  );
+      ],
+    }),
+  });
+
+  if (!conceptResponse.ok) {
+    const err = await conceptResponse.text();
+    console.error("Claude API error:", conceptResponse.status, err);
+    throw new Error(`Claude API error: ${conceptResponse.status}`);
+  }
+
+  const conceptData = await conceptResponse.json();
+  const prompt = conceptData.content?.[0]?.text?.trim();
+  if (!prompt) throw new Error("Claude did not return a prompt.");
+
+  console.log("Generated DALL-E prompt:", prompt);
+
+  // Step 2: Call OpenAI DALL-E 3 API with the concise prompt
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1792x1024",
+      response_format: "b64_json",
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("Gemini API error:", response.status, error);
-    throw new Error(`Gemini API error: ${response.status}`);
+    console.error("OpenAI API error:", response.status, error);
+    throw new Error(`OpenAI API error: ${response.status}`);
   }
 
   const data = await response.json();
+  const imageData: string | null = data.data?.[0]?.b64_json ?? null;
+  const mimeType = "image/png";
 
-  // Extract the image from the response
-  let imageData: string | null = null;
-  let mimeType: string | null = null;
-
-  for (const candidate of data.candidates || []) {
-    for (const part of candidate.content?.parts || []) {
-      if (part.inlineData) {
-        imageData = part.inlineData.data;
-        mimeType = part.inlineData.mimeType;
-        break;
-      }
-    }
-    if (imageData) break;
-  }
-
-  if (!imageData || !mimeType) {
-    throw new Error("Gemini did not return an image. Try again.");
+  if (!imageData) {
+    throw new Error("OpenAI did not return an image. Try again.");
   }
 
   // Save to database

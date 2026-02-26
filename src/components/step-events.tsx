@@ -262,6 +262,17 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
   );
 }
 
+function getValidSourceUrl(sourceUrl: string): string | null {
+  let href = sourceUrl.trim();
+  if (!/^https?:\/\//i.test(href)) href = "https://" + href;
+  try {
+    new URL(href);
+    return href;
+  } catch {
+    return null;
+  }
+}
+
 function EventCard({ event }: { event: EventItem }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -355,14 +366,14 @@ function EventCard({ event }: { event: EventItem }) {
               {event.date} | {event.location}
             </p>
             <p className="text-sm mt-2 italic">{event.description}</p>
-            {event.sourceUrl && (
+            {event.sourceUrl && getValidSourceUrl(event.sourceUrl) && (
               <a
-                href={event.sourceUrl}
+                href={getValidSourceUrl(event.sourceUrl)!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline mt-1 block"
+                className="text-xs text-blue-600 hover:underline mt-1 inline-block"
               >
-                {event.sourceUrl}
+                {event.title}
               </a>
             )}
           </div>
