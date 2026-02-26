@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   {
+    href: "/brain-dump",
+    label: "Brain Dump",
+    icon: Lightbulb,
+    matchPaths: ["/brain-dump"],
+    badge: null,
+  },
+  {
     href: "/create",
     label: "Create",
     icon: PenLine,
@@ -18,14 +25,7 @@ const NAV_ITEMS = [
     label: "Analytics",
     icon: BarChart3,
     matchPaths: ["/analytics"],
-    badge: "New",
-  },
-  {
-    href: "/brain-dump",
-    label: "Brain Dump",
-    icon: Lightbulb,
-    matchPaths: ["/brain-dump"],
-    badge: "New",
+    badge: "Soon",
   },
 ];
 
@@ -62,7 +62,12 @@ export function SidebarNav({ onClose }: SidebarNavProps) {
             <Icon className="h-4 w-4 flex-shrink-0" />
             <span className="flex-1">{item.label}</span>
             {item.badge && (
-              <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+              <span className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                item.badge === "Soon"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-blue-100 text-blue-700"
+              )}>
                 {item.badge}
               </span>
             )}
