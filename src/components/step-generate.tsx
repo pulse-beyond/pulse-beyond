@@ -105,11 +105,13 @@ export function StepGenerate({ issueId, sections, links }: Props) {
   const [error, setError] = useState<string | null>(null);
   const loadingPhrase = useLoadingPhrase(generating);
 
-  // Build group map so we can find all URLs per subject
+  // Build group map using ALL links (so we can find sibling URLs per subject)
   const groupMap = buildGroupMap(links);
 
-  // Count distinct subjects
-  const subjectCount = groupMap.size;
+  // Count distinct selected subjects only
+  const selectedLinks = links.filter((l) => l.selected);
+  const selectedGroupMap = buildGroupMap(selectedLinks);
+  const subjectCount = selectedGroupMap.size;
 
   async function handleGenerate() {
     setGenerating(true);
@@ -117,7 +119,7 @@ export function StepGenerate({ issueId, sections, links }: Props) {
     try {
       const result = await generateDraft(issueId);
       if (result && result.errors && result.errors.length > 0) {
-        setError(`Generated ${result.generated}/${result.total} sections. Errors: ${result.errors.join("; ")}`);
+        setError(`Generated ${result.generated}/${result.total} topics. Errors: ${result.errors.join("; ")}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
@@ -131,7 +133,7 @@ export function StepGenerate({ issueId, sections, links }: Props) {
       <div>
         <h2 className="text-lg font-semibold mb-1">Step C: Generate Draft</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Generate newsletter sections for your {subjectCount} selected subject
+          Generate newsletter topics for your {subjectCount} selected subject
           {subjectCount !== 1 ? "s" : ""}. You can edit everything after generation.
         </p>
       </div>
@@ -240,7 +242,7 @@ function SectionEditor({
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex flex-col gap-1">
-          <span>Section {index + 1}</span>
+          <span>Topic {index + 1}</span>
           {groupLinks.map((l) => (
             <a
               key={l.id}
