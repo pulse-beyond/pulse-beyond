@@ -1,4 +1,4 @@
-import { getIssues, createIssue } from "@/lib/actions/issues";
+import { getIssues, createIssue, ensureUpcomingIssues } from "@/lib/actions/issues";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CreatePage() {
+  // Pre-create empty editions for every Sunday in the next 2 months
+  await ensureUpcomingIssues();
   const issues = await getIssues();
 
   return (

@@ -4,18 +4,52 @@ import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-/** Create a new issue and redirect to its builder page */
+/** Create a new issue and redirect to its builder page.
+ *  If an edition already exists for that Sunday, appends "(versão 2)", "(versão 3)", etc. */
 export async function createIssue() {
   const nextSunday = getNextSunday();
+  const baseTitle = `Snapshot - ${formatDate(nextSunday)}`;
+
+  // Count how many issues already exist for this Sunday
+  const { start, end } = dayBounds(nextSunday);
+  const existingCount = await prisma.issue.count({
+    where: { publishDate: { gte: start, lte: end } },
+  });
+
+  const title =
+    existingCount === 0
+      ? baseTitle
+      : `${baseTitle} (versão ${existingCount + 1})`;
+
   const issue = await prisma.issue.create({
-    data: {
-      title: `Snapshot - ${formatDate(nextSunday)}`,
-      publishDate: nextSunday,
-      currentStep: "links",
-    },
+    data: { title, publishDate: nextSunday, currentStep: "links" },
   });
 
   redirect(`/issues/${issue.id}`);
+}
+
+/** Ensure empty editions exist for every Sunday in the next 2 months.
+ *  Safe to call on every page load — skips dates that already have an edition. */
+export async function ensureUpcomingIssues() {
+  const sundays = getUpcomingSundays(2);
+
+  for (const sunday of sundays) {
+    const { start, end } = dayBounds(sunday);
+    const existing = await prisma.issue.findFirst({
+      where: { publishDate: { gte: start, lte: end } },
+    });
+    if (!existing) {
+      await prisma.issue.create({
+        data: {
+          title: `Snapshot - ${formatDate(sunday)}`,
+          publishDate: sunday,
+          currentStep: "links",
+        },
+      });
+    }
+  }
+
+  revalidatePath("/create");
 }
 
 /** Update issue title */
@@ -44,10 +78,10 @@ export async function deleteIssue(issueId: string) {
   redirect("/create");
 }
 
-/** Get all issues ordered by creation date */
+/** Get all issues ordered by publish date ascending (soonest first), nulls last */
 export async function getIssues() {
   return prisma.issue.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ publishDate: "asc" }, { createdAt: "asc" }],
     include: {
       _count: { select: { links: true, events: true } },
     },
@@ -76,6 +110,35 @@ function getNextSunday(): Date {
   next.setDate(now.getDate() + diff);
   next.setHours(9, 0, 0, 0);
   return next;
+}
+
+/** Returns all Sundays (at 9 AM) from next Sunday up to N months from now */
+function getUpcomingSundays(months: number): Date[] {
+  const sundays: Date[] = [];
+  const now = new Date();
+
+  // End boundary: N months from today
+  const end = new Date(now);
+  end.setMonth(end.getMonth() + months);
+
+  // Start from next Sunday
+  const cursor = getNextSunday();
+
+  while (cursor <= end) {
+    sundays.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return sundays;
+}
+
+/** Start and end of a day for date-only comparisons */
+function dayBounds(d: Date): { start: Date; end: Date } {
+  const start = new Date(d);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(d);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
 }
 
 function formatDate(d: Date): string {
