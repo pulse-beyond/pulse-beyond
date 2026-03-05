@@ -84,10 +84,32 @@ function useLoadingPhrase(active: boolean) {
   return phrase;
 }
 
+/** Group key for a link: its subjectGroup if set, else its own id */
+function getGroupKey(link: LinkItem): string {
+  return link.subjectGroup ?? link.id;
+}
+
+/** Build a map from groupKey → all links in that group */
+function buildGroupMap(links: LinkItem[]): Map<string, LinkItem[]> {
+  const map = new Map<string, LinkItem[]>();
+  for (const link of links) {
+    const key = getGroupKey(link);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(link);
+  }
+  return map;
+}
+
 export function StepGenerate({ issueId, sections, links }: Props) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadingPhrase = useLoadingPhrase(generating);
+
+  // Build group map so we can find all URLs per subject
+  const groupMap = buildGroupMap(links);
+
+  // Count distinct subjects
+  const subjectCount = groupMap.size;
 
   async function handleGenerate() {
     setGenerating(true);
@@ -109,8 +131,8 @@ export function StepGenerate({ issueId, sections, links }: Props) {
       <div>
         <h2 className="text-lg font-semibold mb-1">Step C: Generate Draft</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Generate newsletter sections for your {links.length} selected link
-          {links.length !== 1 ? "s" : ""}. You can edit everything after generation.
+          Generate newsletter sections for your {subjectCount} selected subject
+          {subjectCount !== 1 ? "s" : ""}. You can edit everything after generation.
         </p>
       </div>
 
@@ -146,13 +168,17 @@ export function StepGenerate({ issueId, sections, links }: Props) {
       {sections.length > 0 && (
         <div className="space-y-6 mt-4">
           {sections.map((section, i) => {
-            const link = links.find((l) => l.id === section.linkItemId);
+            // Find primary link and all links in the same subject group
+            const primaryLink = links.find((l) => l.id === section.linkItemId);
+            const groupLinks = primaryLink
+              ? (groupMap.get(getGroupKey(primaryLink)) ?? [primaryLink])
+              : [];
             return (
               <SectionEditor
                 key={section.id}
                 section={section}
                 index={i}
-                linkUrl={link?.url}
+                groupLinks={groupLinks}
               />
             );
           })}
@@ -177,11 +203,11 @@ export function StepGenerate({ issueId, sections, links }: Props) {
 function SectionEditor({
   section,
   index,
-  linkUrl,
+  groupLinks,
 }: {
   section: GeneratedSection;
   index: number;
-  linkUrl?: string;
+  groupLinks: LinkItem[];
 }) {
   const content: MainSectionContent = JSON.parse(
     section.editedContent || section.content
@@ -213,18 +239,19 @@ function SectionEditor({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Section {index + 1}
-          {linkUrl && (
+        <CardTitle className="text-base flex flex-col gap-1">
+          <span>Section {index + 1}</span>
+          {groupLinks.map((l) => (
             <a
-              href={linkUrl}
+              key={l.id}
+              href={l.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:underline font-normal ml-2"
+              className="text-xs text-blue-600 hover:underline font-normal"
             >
-              {linkUrl}
+              {l.url}
             </a>
-          )}
+          ))}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
