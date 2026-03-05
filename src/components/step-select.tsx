@@ -13,17 +13,39 @@ interface Props {
   links: LinkItem[];
 }
 
+/** Group key for a link: its subjectGroup if set, else its own id */
+function getGroupKey(link: LinkItem): string {
+  return link.subjectGroup ?? link.id;
+}
+
+/** Group links into ordered subjects. Returns array of [groupKey, links[]] preserving first-seen order. */
+function groupLinksBySubject(links: LinkItem[]): [string, LinkItem[]][] {
+  const map = new Map<string, LinkItem[]>();
+  for (const link of links) {
+    const key = getGroupKey(link);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(link);
+  }
+  return Array.from(map.entries());
+}
+
 export function StepSelect({ issueId, links }: Props) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(links.filter((l) => l.selected).map((l) => l.id))
+  const subjectGroups = groupLinksBySubject(links);
+
+  // Initialize selection based on which subjects have at least one selected link
+  const initialSelected = new Set<string>(
+    subjectGroups
+      .filter(([, groupLinks]) => groupLinks.some((l) => l.selected))
+      .map(([groupKey]) => groupKey)
   );
+  const [selectedGroupKeys, setSelectedGroupKeys] = useState<Set<string>>(initialSelected);
   const [saving, setSaving] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
 
-  function toggleSelection(id: string) {
-    const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
+  function toggleSubject(groupKey: string) {
+    const next = new Set(selectedGroupKeys);
+    if (next.has(groupKey)) {
+      next.delete(groupKey);
       setLimitHit(false);
     } else {
       if (next.size >= 3) {
@@ -31,29 +53,36 @@ export function StepSelect({ issueId, links }: Props) {
         return;
       }
       setLimitHit(false);
-      next.add(id);
+      next.add(groupKey);
     }
-    setSelectedIds(next);
+    setSelectedGroupKeys(next);
   }
 
   async function handleConfirm() {
     setSaving(true);
     try {
-      await selectFinalLinks(issueId, Array.from(selectedIds));
+      // Collect all link IDs from selected subject groups
+      const selectedIds: string[] = [];
+      for (const [groupKey, groupLinks] of subjectGroups) {
+        if (selectedGroupKeys.has(groupKey)) {
+          selectedIds.push(...groupLinks.map((l) => l.id));
+        }
+      }
+      await selectFinalLinks(issueId, selectedIds);
       await setIssueStep(issueId, "generate");
     } finally {
       setSaving(false);
     }
   }
 
-  // If 3 or fewer links, auto-advance
-  if (links.length <= 3) {
+  // If 3 or fewer subjects, auto-advance
+  if (subjectGroups.length <= 3) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold mb-1">Step B: Select Final 3</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            You have {links.length} link{links.length !== 1 ? "s" : ""}. All
+            You have {subjectGroups.length} subject{subjectGroups.length !== 1 ? "s" : ""}. All
             will be used.
           </p>
         </div>
@@ -82,34 +111,37 @@ export function StepSelect({ issueId, links }: Props) {
       <div>
         <h2 className="text-lg font-semibold mb-1">Step B: Select Final 3</h2>
         <p className="text-sm text-muted-foreground mb-2">
-          Pick exactly 3 links for this issue. Selected: {selectedIds.size}/3
+          Pick exactly 3 subjects for this issue. Selected: {selectedGroupKeys.size}/3
         </p>
         {limitHit && (
           <p className="text-sm text-amber-600 mb-4">
-            You've already selected 3. Feel free to deselect one and swap it if you'd like to change your picks.
+            You&apos;ve already selected 3. Deselect one to swap it.
           </p>
         )}
       </div>
 
       <div className="space-y-3">
-        {links.map((link) => {
-          const isSelected = selectedIds.has(link.id);
+        {subjectGroups.map(([groupKey, groupLinks], index) => {
+          const isSelected = selectedGroupKeys.has(groupKey);
+          const selectionOrder = Array.from(selectedGroupKeys).indexOf(groupKey);
+          const primaryLink = groupLinks[0];
+
           return (
             <Card
-              key={link.id}
+              key={groupKey}
               className={cn(
                 "cursor-pointer transition-colors",
                 isSelected
                   ? "ring-2 ring-primary bg-primary/5"
                   : "hover:bg-accent/50"
               )}
-              onClick={() => toggleSelection(link.id)}
+              onClick={() => toggleSubject(groupKey)}
             >
               <CardContent className="p-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <div
                     className={cn(
-                      "w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center",
+                      "w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center mt-0.5",
                       isSelected
                         ? "border-primary bg-primary"
                         : "border-muted-foreground"
@@ -117,20 +149,33 @@ export function StepSelect({ issueId, links }: Props) {
                   >
                     {isSelected && (
                       <span className="text-white text-xs font-bold">
-                        {Array.from(selectedIds).indexOf(link.id) + 1}
+                        {selectionOrder + 1}
                       </span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">
-                      {link.metaTitle || link.url}
+                    <p className="font-medium text-sm">
+                      Subject {index + 1}
                     </p>
-                    {link.toneNote && (
+                    {primaryLink.toneNote && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Tone: {link.toneNote}
+                        {primaryLink.toneNote}
                       </p>
                     )}
+                    {/* List all URLs in this subject */}
+                    <div className="mt-2 space-y-1">
+                      {groupLinks.map((link) => (
+                        <p key={link.id} className="text-xs truncate text-muted-foreground">
+                          • {link.metaTitle || link.url}
+                        </p>
+                      ))}
+                    </div>
                   </div>
+                  {groupLinks.length > 1 && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {groupLinks.length} URLs
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -145,14 +190,14 @@ export function StepSelect({ issueId, links }: Props) {
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={selectedIds.size !== 3 || saving}
+            disabled={selectedGroupKeys.size !== 3 || saving}
           >
             {saving ? "Saving..." : "Continue with 3 selected"}
           </Button>
         </div>
-        {selectedIds.size > 0 && selectedIds.size < 3 && (
+        {selectedGroupKeys.size > 0 && selectedGroupKeys.size < 3 && (
           <p className="text-xs text-muted-foreground">
-            Select {3 - selectedIds.size} more source{3 - selectedIds.size !== 1 ? "s" : ""} to continue (exactly 3 required).
+            Select {3 - selectedGroupKeys.size} more subject{3 - selectedGroupKeys.size !== 1 ? "s" : ""} to continue (exactly 3 required).
           </p>
         )}
       </div>

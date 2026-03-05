@@ -10,7 +10,8 @@ import { join } from "path";
 export async function addLink(
   issueId: string,
   url: string,
-  toneNote?: string
+  toneNote?: string,
+  subjectGroup?: string
 ) {
   // Count existing links to set order
   const count = await prisma.linkItem.count({ where: { issueId } });
@@ -25,6 +26,7 @@ export async function addLink(
       metaTitle: metadata.title,
       metaDescription: metadata.description,
       toneNote: toneNote || null,
+      subjectGroup: subjectGroup || null,
       order: count,
     },
   });

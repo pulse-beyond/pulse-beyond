@@ -39,6 +39,8 @@ model LinkItem {
   audioPath   String?
   // Transcript of audio (TODO: implement transcription)
   audioTranscript String?
+  // Groups multiple URLs under the same subject/topic
+  subjectGroup String?
   // Whether this link was selected as one of the final 3
   selected    Boolean @default(false)
   // Shortened URL

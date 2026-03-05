@@ -290,10 +290,26 @@ function safeParseJSON(raw: string): any {
 
 /** Build the user prompt for section generation */
 function buildUserPrompt(input: GenerateSectionInput): string {
-  let prompt = `Generate a Snapshot newsletter section for this article.\n\n`;
+  const hasMultipleSources = input.additionalSources && input.additionalSources.length > 0;
+  let prompt = `Generate a Snapshot newsletter section for this subject.\n\n`;
+
+  if (hasMultipleSources) {
+    prompt += `PRIMARY SOURCE:\n`;
+  }
   prompt += `URL: ${input.url}\n`;
   if (input.metaTitle) prompt += `Article title: ${input.metaTitle}\n`;
   if (input.metaDescription) prompt += `Description: ${input.metaDescription}\n`;
+
+  if (hasMultipleSources) {
+    prompt += `\nADDITIONAL SOURCES (same subject, use all for context):\n`;
+    for (const src of input.additionalSources!) {
+      prompt += `- URL: ${src.url}\n`;
+      if (src.metaTitle) prompt += `  Title: ${src.metaTitle}\n`;
+      if (src.metaDescription) prompt += `  Description: ${src.metaDescription}\n`;
+    }
+    prompt += `\n`;
+  }
+
   if (input.toneNote) prompt += `\nRoberto's tone note (his initial reaction): "${input.toneNote}"\n`;
   if (input.audioTranscript) prompt += `\nRoberto's voice memo transcript (his spoken thoughts): "${input.audioTranscript}"\n`;
 

@@ -34,6 +34,12 @@ export interface GenerateSectionInput {
   toneNote?: string | null;
   audioTranscript?: string | null;
   archiveContext?: string | null; // Relevant past editions for context
+  // Additional URLs grouped under the same subject
+  additionalSources?: {
+    url: string;
+    metaTitle?: string | null;
+    metaDescription?: string | null;
+  }[];
 }
 
 // The full generated draft for one link

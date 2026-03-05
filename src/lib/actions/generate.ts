@@ -6,6 +6,11 @@ import { searchArchive } from "@/lib/archive";
 import type { MainSectionContent } from "@/types";
 import { revalidatePath } from "next/cache";
 
+/** Group key for a link: its subjectGroup if set, else its own id */
+function getLinkGroupKey(link: { id: string; subjectGroup: string | null }): string {
+  return link.subjectGroup ?? link.id;
+}
+
 /** Generate draft sections for all selected links using the AI provider */
 export async function generateDraft(issueId: string) {
   const ai = getAIProvider();
@@ -20,33 +25,49 @@ export async function generateDraft(issueId: string) {
     throw new Error("No links selected. Select at least 1 link to generate.");
   }
 
+  // Group selected links by subject
+  const subjectMap = new Map<string, typeof links>();
+  for (const link of links) {
+    const key = getLinkGroupKey(link);
+    if (!subjectMap.has(key)) subjectMap.set(key, []);
+    subjectMap.get(key)!.push(link);
+  }
+  const subjects = Array.from(subjectMap.values());
+
   // Clear any existing main sections for this issue
   await prisma.generatedSection.deleteMany({
     where: { issueId, sectionType: "main" },
   });
 
-  // Generate a section for each selected link
+  // Generate one section per subject
   const errors: string[] = [];
   let generated = 0;
 
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i];
+  for (let i = 0; i < subjects.length; i++) {
+    const groupLinks = subjects[i];
+    const primaryLink = groupLinks[0];
+    const additionalLinks = groupLinks.slice(1);
 
     try {
-      // Search archive for relevant past content
+      // Search archive for relevant past content (using primary link)
       const archiveContext = searchArchive({
-        metaTitle: link.metaTitle ?? undefined,
-        metaDescription: link.metaDescription ?? undefined,
-        url: link.url,
+        metaTitle: primaryLink.metaTitle ?? undefined,
+        metaDescription: primaryLink.metaDescription ?? undefined,
+        url: primaryLink.url,
       });
 
       const draft = await ai.generateSection({
-        url: link.url,
-        metaTitle: link.metaTitle,
-        metaDescription: link.metaDescription,
-        toneNote: link.toneNote,
-        audioTranscript: link.audioTranscript,
+        url: primaryLink.url,
+        metaTitle: primaryLink.metaTitle,
+        metaDescription: primaryLink.metaDescription,
+        toneNote: primaryLink.toneNote,
+        audioTranscript: primaryLink.audioTranscript,
         archiveContext: archiveContext || null,
+        additionalSources: additionalLinks.map((l) => ({
+          url: l.url,
+          metaTitle: l.metaTitle,
+          metaDescription: l.metaDescription,
+        })),
       });
 
       const content: MainSectionContent = {
@@ -58,7 +79,7 @@ export async function generateDraft(issueId: string) {
       await prisma.generatedSection.create({
         data: {
           issueId,
-          linkItemId: link.id,
+          linkItemId: primaryLink.id,
           sectionType: "main",
           content: JSON.stringify(content),
           order: i,
@@ -67,13 +88,13 @@ export async function generateDraft(issueId: string) {
       generated++;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      console.error(`Failed to generate section for link ${link.url}:`, msg);
-      errors.push(`Section ${i + 1} (${link.metaTitle || link.url}): ${msg}`);
+      console.error(`Failed to generate section for subject ${i + 1}:`, msg);
+      errors.push(`Section ${i + 1} (${primaryLink.metaTitle || primaryLink.url}): ${msg}`);
     }
   }
 
   revalidatePath(`/issues/${issueId}`);
-  return { generated, total: links.length, errors };
+  return { generated, total: subjects.length, errors };
 }
 
 /** Update a generated section's edited content */
