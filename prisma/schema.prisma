@@ -97,6 +97,13 @@ model Export {
   issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
+// Singleton cache for Brain Dump articles (id is always "singleton")
+model BrainDumpCache {
+  id        String   @id @default("singleton")
+  cards     String   // JSON-encoded BrainDumpCard[]
+  fetchedAt DateTime @default(now())
+}
+
 model GeneratedImage {
   id        String   @id @default(cuid())
   issueId   String

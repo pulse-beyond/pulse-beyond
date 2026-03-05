@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { addLink } from "@/lib/actions/links";
+import { revalidatePath } from "next/cache";
 import type { BrainDumpCard, OpenIssue } from "@/types/index";
 
 // ─── Editorial DNA (Roberto's content scope) ────────────────────────────────
@@ -129,9 +130,10 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
   }
 ]`;
 
-  // Call OpenAI API with web_search_preview tool
+  // Call OpenAI API with web_search_preview tool (no-store to bypass Next.js cache)
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -259,6 +261,34 @@ export async function getOpenIssues(): Promise<OpenIssue[]> {
         })
       : null,
   }));
+}
+
+// ─── Cache: read & refresh ────────────────────────────────────────────────────
+
+/** Read cached Brain Dump cards from the DB (instant, no API call) */
+export async function getCachedBrainDump(): Promise<{
+  cards: BrainDumpCard[];
+  fetchedAt: Date | null;
+}> {
+  const cache = await prisma.brainDumpCache.findUnique({
+    where: { id: "singleton" },
+  });
+  if (!cache) return { cards: [], fetchedAt: null };
+  return {
+    cards: JSON.parse(cache.cards) as BrainDumpCard[],
+    fetchedAt: cache.fetchedAt,
+  };
+}
+
+/** Fetch fresh articles from OpenAI and save to DB cache */
+export async function refreshBrainDump(): Promise<void> {
+  const cards = await fetchBrainDumpCards();
+  await prisma.brainDumpCache.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", cards: JSON.stringify(cards), fetchedAt: new Date() },
+    update: { cards: JSON.stringify(cards), fetchedAt: new Date() },
+  });
+  revalidatePath("/brain-dump");
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
