@@ -3,8 +3,6 @@
 import { prisma } from "@/lib/db";
 import { fetchUrlMetadata } from "@/lib/url-metadata";
 import { revalidatePath } from "next/cache";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 
 /** Add a new link to an issue, fetching URL metadata automatically */
 export async function addLink(
@@ -83,7 +81,7 @@ export async function selectFinalLinks(
   revalidatePath(`/issues/${issueId}`);
 }
 
-/** Upload an audio file for a link */
+/** Record and transcribe a voice memo for a link (no disk write — memory only) */
 export async function uploadAudio(linkId: string, formData: FormData) {
   const file = formData.get("audio") as File;
   if (!file || file.size === 0) return;
@@ -91,33 +89,18 @@ export async function uploadAudio(linkId: string, formData: FormData) {
   const link = await prisma.linkItem.findUnique({ where: { id: linkId } });
   if (!link) return;
 
-  // Ensure uploads directory exists
-  const uploadsDir = join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-
-  // Save file with unique name
-  const ext = file.name.split(".").pop() || "webm";
-  const filename = `${linkId}-${Date.now()}.${ext}`;
-  const filepath = join(uploadsDir, filename);
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(filepath, buffer);
-
-  // Transcribe audio using Whisper API
+  // Transcribe directly from the in-memory File — no disk write needed
   let transcript: string | null = null;
   try {
     const { transcribeAudio } = await import("@/lib/whisper");
-    transcript = await transcribeAudio(filepath);
+    transcript = await transcribeAudio(file);
   } catch (e) {
-    console.error("Transcription failed, saving audio without transcript:", e);
+    console.error("Transcription failed:", e);
   }
 
   await prisma.linkItem.update({
     where: { id: linkId },
-    data: {
-      audioPath: `/uploads/${filename}`,
-      audioTranscript: transcript,
-    },
+    data: { audioTranscript: transcript },
   });
 
   revalidatePath(`/issues/${link.issueId}`);

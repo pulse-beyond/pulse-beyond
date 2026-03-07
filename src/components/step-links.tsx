@@ -214,7 +214,7 @@ function SubjectGroupCard({
   issueId: string;
   onRemoveLink: (linkId: string) => void;
   onToneNoteChange: (linkId: string, note: string) => void;
-  onAudioUpload: (linkId: string, file: File) => void;
+  onAudioUpload: (linkId: string, file: File) => Promise<void>;
 }) {
   const primaryLink = links[0];
   const [editingTone, setEditingTone] = useState(false);
@@ -376,9 +376,10 @@ function LinkRow({
 }: {
   link: LinkItem;
   onRemove: () => void;
-  onAudioUpload: (file: File) => void;
+  onAudioUpload: (file: File) => Promise<void>;
 }) {
   const [micError, setMicError] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const { isRecording, recordingTime, startRecording, stopRecording, formatTime } =
     useAudioRecorder();
 
@@ -390,7 +391,14 @@ function LinkRow({
 
   async function handleStopRecording() {
     const file = await stopRecording();
-    if (file) onAudioUpload(file);
+    if (file) {
+      setTranscribing(true);
+      try {
+        await onAudioUpload(file);
+      } finally {
+        setTranscribing(false);
+      }
+    }
   }
 
   return (
@@ -415,13 +423,21 @@ function LinkRow({
 
         {/* Audio controls */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {link.audioPath ? (
-            <>
-              <span className="text-xs text-green-700 font-medium">
-                Voice memo attached
-              </span>
-              <audio src={link.audioPath} controls className="h-7" />
-            </>
+          {link.audioTranscript ? (
+            <div className="w-full">
+              <span className="text-xs text-green-700 font-medium">Voice memo transcribed</span>
+              <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-2">
+                &ldquo;{link.audioTranscript}&rdquo;
+              </p>
+            </div>
+          ) : transcribing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
+              <svg className="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Transcribing…
+            </span>
           ) : isRecording ? (
             <>
               <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
@@ -449,26 +465,9 @@ function LinkRow({
                 </svg>
                 Voice memo
               </button>
-              <span className="text-xs text-muted-foreground">or</span>
-              <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" />
-                  <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-                </svg>
-                Upload
-                <input
-                  type="file"
-                  accept="audio/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onAudioUpload(file);
-                  }}
-                />
-              </label>
               {micError && (
                 <span className="text-xs text-destructive">
-                  Mic unavailable. Try upload.
+                  Mic unavailable.
                 </span>
               )}
             </>

@@ -1,10 +1,9 @@
-import { readFile } from "fs/promises";
-
 /**
- * Transcribes an audio file using OpenAI's Whisper API.
+ * Transcribes an audio File using OpenAI's Whisper API.
+ * Accepts a File object directly — no disk read/write needed.
  * Returns the transcript text, or null if transcription fails.
  */
-export async function transcribeAudio(filepath: string): Promise<string | null> {
+export async function transcribeAudio(file: File): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.warn("Whisper: OPENAI_API_KEY not set, skipping transcription.");
@@ -12,25 +11,8 @@ export async function transcribeAudio(filepath: string): Promise<string | null> 
   }
 
   try {
-    const fileBuffer = await readFile(filepath);
-
-    // Determine the filename and mime type
-    const ext = filepath.split(".").pop()?.toLowerCase() || "webm";
-    const mimeTypes: Record<string, string> = {
-      webm: "audio/webm",
-      m4a: "audio/mp4",
-      mp3: "audio/mpeg",
-      mp4: "audio/mp4",
-      wav: "audio/wav",
-      ogg: "audio/ogg",
-      flac: "audio/flac",
-    };
-    const mimeType = mimeTypes[ext] || "audio/webm";
-
-    // Build multipart form data
     const formData = new FormData();
-    const blob = new Blob([fileBuffer], { type: mimeType });
-    formData.append("file", blob, `audio.${ext}`);
+    formData.append("file", file, file.name);
     formData.append("model", "whisper-1");
     formData.append("response_format", "text");
 
@@ -42,7 +24,7 @@ export async function transcribeAudio(filepath: string): Promise<string | null> 
           Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
-        signal: AbortSignal.timeout(60000), // 60s timeout for longer recordings
+        signal: AbortSignal.timeout(60000),
       }
     );
 
