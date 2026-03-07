@@ -41,27 +41,27 @@ EXCLUDE:
 - Celebrity or lifestyle tech (gadget reviews, consumer apps)
 - US domestic political news unless it has significant global tech/economic implications
 - Opinion pieces with no factual news anchor
+- Wikipedia, Wikimedia, wikis, or any crowd-sourced reference content
+- Press releases or company blog posts without independent editorial coverage
 
 TONE: Intellectually curious, never sensationalist. Global and multipolar. Analytically honest. Forward-looking.
 `.trim();
 
 // ─── Edition window: last Sunday → next Saturday ─────────────────────────────
 
-function getEditionWindow(): { start: Date; end: Date } {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-
-  // Last Sunday (or today if today is Sunday)
-  const start = new Date(now);
-  start.setDate(now.getDate() - dayOfWeek);
+function getEditionWindowForDate(date: Date): { start: Date; end: Date } {
+  const dayOfWeek = date.getDay(); // 0 = Sunday
+  const start = new Date(date);
+  start.setDate(date.getDate() - dayOfWeek);
   start.setHours(0, 0, 0, 0);
-
-  // Next Saturday
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   end.setHours(23, 59, 59, 999);
-
   return { start, end };
+}
+
+function getEditionWindow(): { start: Date; end: Date } {
+  return getEditionWindowForDate(new Date());
 }
 
 function formatDateLong(d: Date): string {
@@ -280,13 +280,49 @@ export async function getCachedBrainDump(): Promise<{
   };
 }
 
-/** Fetch fresh articles from OpenAI and save to DB cache */
+const CARD_CAP = 50;
+
+const EXCLUDED_DOMAINS = ["wikipedia.org", "wikimedia.org", "wikidata.org", "wiki."];
+
+function isRelevantSource(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return !EXCLUDED_DOMAINS.some((d) => hostname.includes(d));
+  } catch {
+    return true;
+  }
+}
+
+/** Fetch fresh articles from OpenAI and save to DB cache.
+ *  - Same week as last fetch → appends new cards on top (dedup by URL, cap 50)
+ *  - New week → resets the cache with only the fresh cards
+ */
 export async function refreshBrainDump(): Promise<void> {
-  const cards = await fetchBrainDumpCards();
+  const { start: currentWindowStart } = getEditionWindow();
+
+  // Decide whether to append or reset based on week boundary
+  const existing = await getCachedBrainDump();
+  let existingCards: BrainDumpCard[] = [];
+  if (existing.fetchedAt) {
+    const { start: cachedWindowStart } = getEditionWindowForDate(new Date(existing.fetchedAt));
+    if (cachedWindowStart.getTime() === currentWindowStart.getTime()) {
+      existingCards = existing.cards; // same week → keep
+    }
+    // different week → existingCards stays empty (reset)
+  }
+
+  // Fetch and filter new cards
+  const newCards = (await fetchBrainDumpCards()).filter((c) => isRelevantSource(c.url));
+
+  // Merge: new on top, dedup by URL against existing, cap at CARD_CAP
+  const seenUrls = new Set(newCards.map((c) => c.url));
+  const dedupedExisting = existingCards.filter((c) => !seenUrls.has(c.url));
+  const merged = [...newCards, ...dedupedExisting].slice(0, CARD_CAP);
+
   await prisma.brainDumpCache.upsert({
     where: { id: "singleton" },
-    create: { id: "singleton", cards: JSON.stringify(cards), fetchedAt: new Date() },
-    update: { cards: JSON.stringify(cards), fetchedAt: new Date() },
+    create: { id: "singleton", cards: JSON.stringify(merged), fetchedAt: new Date() },
+    update: { cards: JSON.stringify(merged), fetchedAt: new Date() },
   });
   revalidatePath("/brain-dump");
 }
