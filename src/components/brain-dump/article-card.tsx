@@ -90,7 +90,7 @@ function EditionDropdown({ openIssues, cardUrl, onAdded }: EditionDropdownProps)
       </button>
 
       {open && (
-        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[200px] rounded-lg border bg-white shadow-xl py-1" style={{ backgroundColor: 'white' }}>
+        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[240px] rounded-lg border bg-white shadow-xl py-1" style={{ backgroundColor: 'white' }}>
           <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Choose an edition
           </p>
@@ -101,14 +101,9 @@ function EditionDropdown({ openIssues, cardUrl, onAdded }: EditionDropdownProps)
               disabled={loading === issue.id}
               className="w-full text-left px-3 py-2 text-[12px] hover:bg-muted transition-colors flex items-center justify-between gap-2 disabled:opacity-60"
             >
-              <span className="font-medium text-foreground truncate">
-                {issue.title}
+              <span className="font-medium text-foreground">
+                {issue.publishDate ?? issue.title.replace(/^Snapshot - /, "")}
               </span>
-              {issue.publishDate && (
-                <span className="text-muted-foreground shrink-0 text-[10px]">
-                  {issue.publishDate}
-                </span>
-              )}
               {loading === issue.id && (
                 <Loader2 className="h-3 w-3 animate-spin shrink-0 text-muted-foreground" />
               )}
