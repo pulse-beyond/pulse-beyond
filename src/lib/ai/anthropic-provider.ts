@@ -211,7 +211,7 @@ RULES:
         },
         body: JSON.stringify({
           model: "gpt-4o",
-          tools: [{ type: "web_search" }],
+          tools: [{ type: "web_search_preview" }],
           input: prompt,
         }),
         signal: AbortSignal.timeout(90000),

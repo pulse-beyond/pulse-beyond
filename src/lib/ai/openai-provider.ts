@@ -27,10 +27,8 @@ TITLES:
 
 "MY THOUGHTS ON IT" section:
 - Deeply personal, first person singular ("I").
-- Frequently references Roberto's own experiences: travels, meetings with policymakers, conversations with investors, participation in events.
-- Often includes phrases like "I remember...", "I have seen...", "I have had the chance to...", "In one of my previous lives..."
-- Brings in the perspective of a VC investor (Roberto is part of Seldor Capital, a VC firm investing in space tech).
-- Connects personal experience to the broader point.
+- Personal references (travels, meetings with policymakers, conversations with investors, participation in events) are a known feature of Roberto's writing style, BUT they must ONLY appear when grounded in real data: his tone note, voice memo transcript, or archive context provided. NEVER fabricate or invent personal experiences he has not mentioned.
+- Phrases like "I remember...", "I have seen...", "I have had the chance to...", "In one of my previous lives..." should only be used when the content is explicitly supported by provided context. If no personal context is available, express his analytical perspective as a VC investor (Roberto is part of Seldor Capital, a VC firm investing in space tech) without inventing experiences.
 - Almost always ends with 1-2 provocative questions directed at the reader.
 - Slightly opinionated but grounded. Never arrogant.
 - Tone: curious, insightful, warm, intellectually honest.
