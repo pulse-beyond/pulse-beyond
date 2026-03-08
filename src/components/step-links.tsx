@@ -222,6 +222,9 @@ function SubjectGroupCard({
   const [addingUrl, setAddingUrl] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [savingUrl, setSavingUrl] = useState(false);
+  const [micError, setMicError] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const { isRecording, recordingTime, startRecording, stopRecording, formatTime } = useAudioRecorder();
 
   // Group's tone note is from the primary link
   const sharedToneNote = primaryLink.toneNote;
@@ -231,8 +234,6 @@ function SubjectGroupCard({
     if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://"))) return;
     setSavingUrl(true);
     try {
-      // Use groupKey as the subjectGroup for the new link
-      // groupKey is either link.subjectGroup or link.id — both work as the group identifier
       await addLink(issueId, trimmed, primaryLink.toneNote || undefined, groupKey);
       setNewUrl("");
       setAddingUrl(false);
@@ -242,11 +243,28 @@ function SubjectGroupCard({
   }
 
   async function handleSaveToneNote() {
-    // Update tone note for all links in this group
     for (const link of links) {
       await updateLinkToneNote(link.id, toneValue);
     }
     setEditingTone(false);
+  }
+
+  async function handleStartRecording() {
+    setMicError(false);
+    const ok = await startRecording();
+    if (!ok) setMicError(true);
+  }
+
+  async function handleStopRecording() {
+    const file = await stopRecording();
+    if (file) {
+      setTranscribing(true);
+      try {
+        await onAudioUpload(primaryLink.id, file);
+      } finally {
+        setTranscribing(false);
+      }
+    }
   }
 
   return (
@@ -309,6 +327,52 @@ function SubjectGroupCard({
           </div>
         )}
 
+        {/* Voice memo — per subject, saved to primary link */}
+        <div className="flex flex-wrap items-center gap-2">
+          {primaryLink.audioTranscript ? (
+            <div className="w-full">
+              <span className="text-xs text-green-700 font-medium">Voice memo transcribed</span>
+              <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-2">
+                &ldquo;{primaryLink.audioTranscript}&rdquo;
+              </p>
+            </div>
+          ) : transcribing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
+              <svg className="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Transcribing…
+            </span>
+          ) : isRecording ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Recording {formatTime(recordingTime)}
+              </span>
+              <Button size="sm" variant="destructive" onClick={handleStopRecording} className="h-6 text-xs">
+                Stop
+              </Button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleStartRecording}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-red-400">
+                  <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" />
+                  <path d="M5.5 9.643a.75.75 0 0 0-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-1.5v-1.546A6.001 6.001 0 0 0 16 10v-.357a.75.75 0 0 0-1.5 0V10a4.5 4.5 0 0 1-9 0v-.357Z" />
+                </svg>
+                Voice memo
+              </button>
+              {micError && (
+                <span className="text-xs text-destructive">Mic unavailable.</span>
+              )}
+            </>
+          )}
+        </div>
+
         {/* Links in this group */}
         <div className="space-y-2">
           {links.map((link) => (
@@ -316,7 +380,6 @@ function SubjectGroupCard({
               key={link.id}
               link={link}
               onRemove={() => onRemoveLink(link.id)}
-              onAudioUpload={(file) => onAudioUpload(link.id, file)}
             />
           ))}
         </div>
@@ -372,35 +435,10 @@ function SubjectGroupCard({
 function LinkRow({
   link,
   onRemove,
-  onAudioUpload,
 }: {
   link: LinkItem;
   onRemove: () => void;
-  onAudioUpload: (file: File) => Promise<void>;
 }) {
-  const [micError, setMicError] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const { isRecording, recordingTime, startRecording, stopRecording, formatTime } =
-    useAudioRecorder();
-
-  async function handleStartRecording() {
-    setMicError(false);
-    const ok = await startRecording();
-    if (!ok) setMicError(true);
-  }
-
-  async function handleStopRecording() {
-    const file = await stopRecording();
-    if (file) {
-      setTranscribing(true);
-      try {
-        await onAudioUpload(file);
-      } finally {
-        setTranscribing(false);
-      }
-    }
-  }
-
   return (
     <div className="flex items-start gap-2 p-2 rounded bg-muted/40">
       <div className="flex-1 min-w-0">
@@ -420,61 +458,7 @@ function LinkRow({
         >
           {link.url}
         </a>
-
-        {/* Audio controls */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {link.audioTranscript ? (
-            <div className="w-full">
-              <span className="text-xs text-green-700 font-medium">Voice memo transcribed</span>
-              <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-2">
-                &ldquo;{link.audioTranscript}&rdquo;
-              </p>
-            </div>
-          ) : transcribing ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
-              <svg className="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Transcribing…
-            </span>
-          ) : isRecording ? (
-            <>
-              <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                Recording {formatTime(recordingTime)}
-              </span>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleStopRecording}
-                className="h-6 text-xs"
-              >
-                Stop
-              </Button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleStartRecording}
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-red-400">
-                  <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" />
-                  <path d="M5.5 9.643a.75.75 0 0 0-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-1.5v-1.546A6.001 6.001 0 0 0 16 10v-.357a.75.75 0 0 0-1.5 0V10a4.5 4.5 0 0 1-9 0v-.357Z" />
-                </svg>
-                Voice memo
-              </button>
-              {micError && (
-                <span className="text-xs text-destructive">
-                  Mic unavailable.
-                </span>
-              )}
-            </>
-          )}
-        </div>
       </div>
-
       <Button
         variant="ghost"
         size="sm"
