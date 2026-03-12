@@ -82,20 +82,24 @@ export async function selectFinalLinks(
 }
 
 /** Record and transcribe a voice memo for a link (no disk write — memory only) */
-export async function uploadAudio(linkId: string, formData: FormData) {
+export async function uploadAudio(
+  linkId: string,
+  formData: FormData
+): Promise<{ error?: string }> {
   const file = formData.get("audio") as File;
-  if (!file || file.size === 0) return;
+  if (!file || file.size === 0) return { error: "No audio file received." };
 
   const link = await prisma.linkItem.findUnique({ where: { id: linkId } });
-  if (!link) return;
+  if (!link) return { error: "Link not found." };
 
   // Transcribe directly from the in-memory File — no disk write needed
-  let transcript: string | null = null;
+  let transcript: string;
   try {
     const { transcribeAudio } = await import("@/lib/whisper");
     transcript = await transcribeAudio(file);
   } catch (e) {
     console.error("Transcription failed:", e);
+    return { error: "Transcription failed. Please try again." };
   }
 
   await prisma.linkItem.update({
@@ -104,4 +108,5 @@ export async function uploadAudio(linkId: string, formData: FormData) {
   });
 
   revalidatePath(`/issues/${link.issueId}`);
+  return {};
 }
