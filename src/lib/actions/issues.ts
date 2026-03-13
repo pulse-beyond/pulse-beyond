@@ -78,12 +78,59 @@ export async function deleteIssue(issueId: string) {
   redirect("/create");
 }
 
-/** Get all issues ordered by publish date ascending (soonest first), nulls last */
+/** Get all active (unpublished) issues ordered by publish date ascending (soonest first) */
 export async function getIssues() {
   return prisma.issue.findMany({
+    where: { publishedAt: null },
     orderBy: [{ publishDate: "asc" }, { createdAt: "asc" }],
     include: {
       _count: { select: { links: true, events: true } },
+    },
+  });
+}
+
+/** Count all published issues (for the "X past editions" link on Create) */
+export async function countPublishedIssues() {
+  return prisma.issue.count({ where: { publishedAt: { not: null } } });
+}
+
+/** Mark an issue as published — moves it from Create to Past Editions */
+export async function markAsPublished(issueId: string) {
+  await prisma.issue.update({
+    where: { id: issueId },
+    data: { publishedAt: new Date() },
+  });
+  revalidatePath("/create");
+  revalidatePath("/past-editions");
+}
+
+/** Get all published issues ordered by publish date descending (most recent first) */
+export async function getPublishedIssues() {
+  return prisma.issue.findMany({
+    where: { publishedAt: { not: null } },
+    orderBy: [{ publishDate: "desc" }, { publishedAt: "desc" }],
+    include: {
+      sections: {
+        where: { sectionType: "main" },
+        orderBy: { order: "asc" },
+      },
+      exports: { orderBy: { createdAt: "desc" }, take: 1 },
+      images: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+}
+
+/** Get a single published issue for the detail view */
+export async function getPublishedIssue(id: string) {
+  return prisma.issue.findUnique({
+    where: { id },
+    include: {
+      sections: {
+        where: { sectionType: "main" },
+        orderBy: { order: "asc" },
+      },
+      exports: { orderBy: { createdAt: "desc" }, take: 1 },
+      images: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 }

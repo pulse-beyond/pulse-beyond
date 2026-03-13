@@ -1,4 +1,4 @@
-import { getIssues, createIssue, ensureUpcomingIssues } from "@/lib/actions/issues";
+import { getIssues, createIssue, ensureUpcomingIssues, countPublishedIssues } from "@/lib/actions/issues";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { PenLine } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
+import { MarkAsPublishedButton } from "@/components/mark-as-published-button";
 
 export const metadata: Metadata = {
   title: "Create | Snapshot Builder",
@@ -23,7 +24,10 @@ export const metadata: Metadata = {
 export default async function CreatePage() {
   // Pre-create empty editions for every Sunday in the next 2 months
   await ensureUpcomingIssues();
-  const issues = await getIssues();
+  const [issues, publishedCount] = await Promise.all([
+    getIssues(),
+    countPublishedIssues(),
+  ]);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -61,8 +65,8 @@ export default async function CreatePage() {
                       <CardTitle className="text-lg">{issue.title}</CardTitle>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="outline">{issue.currentStep}</Badge>
-                        {/* Spacer so delete button doesn't overlap badge */}
-                        <div className="w-16" />
+                        {/* Spacer so action buttons don't overlap badge */}
+                        <div className="w-32" />
                       </div>
                     </div>
                     <CardDescription>
@@ -74,12 +78,24 @@ export default async function CreatePage() {
                   </CardHeader>
                 </Card>
               </Link>
-              {/* Delete button — absolute, outside Link so it doesn't navigate */}
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {/* Action buttons — absolute, outside Link so they don't navigate */}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-end gap-1">
+                <MarkAsPublishedButton issueId={issue.id} />
                 <DeleteIssueButton issueId={issue.id} issueTitle={issue.title} />
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {publishedCount > 0 && (
+        <div className="mt-6 text-center">
+          <Link
+            href="/past-editions"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {publishedCount} past edition{publishedCount !== 1 ? "s" : ""} →
+          </Link>
         </div>
       )}
     </div>

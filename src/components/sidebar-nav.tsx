@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Lightbulb, PenLine } from "lucide-react";
+import { Archive, BarChart3, Lightbulb, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -18,6 +18,13 @@ const NAV_ITEMS = [
     label: "Create",
     icon: PenLine,
     matchPaths: ["/create", "/issues"],
+    badge: null,
+  },
+  {
+    href: "/past-editions",
+    label: "Past Editions",
+    icon: Archive,
+    matchPaths: ["/past-editions"],
     badge: null,
   },
   {

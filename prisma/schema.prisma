@@ -16,6 +16,8 @@ model Issue {
   publishDate DateTime?
   // Current step in the workflow: "links" | "select" | "generate" | "events" | "shorten" | "export"
   currentStep String  @default("links")
+  // Set when the user marks this edition as published — moves it to Past Editions
+  publishedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
