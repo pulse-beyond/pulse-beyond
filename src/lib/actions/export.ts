@@ -71,14 +71,24 @@ export async function buildExport(
     lines.push(content.myThoughts);
     lines.push("");
 
-    // Collect links for this section
+    // Collect links for this section — include ALL links from the same subjectGroup
     const linkedItem = section.linkItem;
     if (linkedItem) {
-      // Find all links that belong to the same group/section
-      // Each section maps to one selected link; gather its URLs
       const urls: string[] = [];
-      // The primary link for this section
-      urls.push(linkedItem.shortUrl || linkedItem.url);
+
+      if (linkedItem.subjectGroup) {
+        // Find every selected link that shares this subject group, preserving order
+        const groupLinks = issue.links.filter(
+          (l) => l.subjectGroup === linkedItem.subjectGroup
+        );
+        for (const l of groupLinks) {
+          urls.push(l.shortUrl || l.url);
+        }
+      } else {
+        // No group — just the primary link
+        urls.push(linkedItem.shortUrl || linkedItem.url);
+      }
+
       sectionLinks.push({ title, urls });
     }
   }
