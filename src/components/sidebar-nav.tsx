@@ -32,7 +32,7 @@ const NAV_ITEMS = [
     label: "Analytics",
     icon: BarChart3,
     matchPaths: ["/analytics"],
-    badge: "Soon",
+    badge: null,
   },
 ];
 

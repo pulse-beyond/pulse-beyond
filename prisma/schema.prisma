@@ -118,3 +118,32 @@ model GeneratedImage {
   issue     Issue            @relation(fields: [issueId], references: [id], onDelete: Cascade)
   section   GeneratedSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 }
+
+// LinkedIn analytics snapshot — one record per Excel upload
+model LinkedInSnapshot {
+  id               String   @id @default(cuid())
+  uploadedAt       DateTime @default(now())
+  periodStart      DateTime
+  periodEnd        DateTime
+  totalImpressions Int
+  totalEngagements Int
+  totalFollowers   Int
+  newFollowers     Int
+  dailyMetrics     Json     // [{date: string, impressions: number, engagements: number}]
+  monthlyMetrics   Json     // [{month: string, impressions: number, engagements: number, engagementRate: number}]
+  dayOfWeekMetrics Json     // [{day: string, impressions: number, engagements: number, engagementRate: number}]
+  topPosts         Json     // [{url: string, impressions: number, engagements: number, engagementRate: number, date: string}]
+  demographics     Json     // [{category: string, name: string, percentage: number}]
+  aiInsights       String?
+  aiInsightsAt     DateTime?
+}
+
+// Newsletter stats — manually updated
+model NewsletterStats {
+  id           String   @id @default(cuid())
+  updatedAt    DateTime @default(now())
+  subscribers  Int      @default(0)
+  articleViews Int      @default(0)
+  impressions  Int      @default(0)
+  engagements  Int      @default(0)
+}
