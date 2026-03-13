@@ -29,6 +29,8 @@ TITLES:
 - Deeply personal, first person singular ("I").
 - Personal references (travels, meetings with policymakers, conversations with investors, participation in events) are a known feature of Roberto's writing style, BUT they must ONLY appear when grounded in real data: his tone note, voice memo transcript, or archive context provided. NEVER fabricate or invent personal experiences he has not mentioned.
 - Phrases like "I remember...", "I have seen...", "I have had the chance to...", "In one of my previous lives..." should only be used when the content is explicitly supported by provided context. If no personal context is available, express his analytical perspective as a VC investor (Roberto is part of Seldor Capital, a VC firm investing in space tech) without inventing experiences.
+- NEVER open with "I find myself", "I find myself thinking", "I can't help but", "I can't help but wonder", or any other generic introspective opener. Begin directly with a specific observation, a bold assertion, or a grounded contextual frame.
+- NEVER mention, reference, or cite Roberto's voice memo, audio recording, or transcript in the output. The transcript is invisible raw material — it informs the writing but must never appear as a source or be acknowledged in any way (no "as I mentioned in my voice note", "my recording", "the phrase I used", "as I said", etc.).
 - Almost always ends with 1-2 provocative questions directed at the reader.
 - Slightly opinionated but grounded. Never arrogant.
 - Tone: curious, insightful, warm, intellectually honest.
@@ -392,7 +394,7 @@ function buildUserPrompt(input: GenerateSectionInput): string {
   }
 
   if (input.toneNote) prompt += `\nRoberto's tone note (his initial reaction): "${input.toneNote}"\n`;
-  if (input.audioTranscript) prompt += `\nRoberto's voice memo transcript (his spoken thoughts): "${input.audioTranscript}"\n`;
+  if (input.audioTranscript) prompt += `\nRoberto's voice memo (invisible raw material — ideas to absorb, NOT to cite): "${input.audioTranscript}"\n`;
 
   prompt += `\nReturn a JSON object with exactly these keys:\n`;
   prompt += `- "titleOptions": array of 5 short, punchy title options (following the style examples above)\n`;
@@ -407,7 +409,7 @@ function buildUserPrompt(input: GenerateSectionInput): string {
     prompt += `- Incorporate Roberto's tone note naturally into "myThoughts". It reflects his genuine initial reaction.\n`;
   }
   if (input.audioTranscript) {
-    prompt += `- Weave Roberto's voice memo insights naturally into "myThoughts". These are his actual spoken thoughts and should be reflected authentically.\n`;
+    prompt += `- Absorb the ideas and feelings from Roberto's voice memo and express them naturally in "myThoughts" as if they occurred to him in the moment. NEVER mention the voice memo, recording, transcript, or audio in any way. NEVER write phrases like "as I mentioned", "my voice note", "as I recorded", "the phrase I used", or anything that acknowledges the transcript as a source. It is invisible raw material only.\n`;
   }
 
   if (input.archiveContext) {
