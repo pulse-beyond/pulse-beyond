@@ -46,7 +46,7 @@ export function MarkAsPublishedButton({ issueId }: Props) {
       ].join(" ")}
     >
       <CheckCircle className="h-3.5 w-3.5" />
-      {confirming ? "Confirm?" : "Published"}
+      {confirming ? "Confirm?" : "Add as published"}
     </button>
   );
 }

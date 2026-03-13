@@ -356,8 +356,8 @@ function SubjectGroupCard({
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 Recording {formatTime(recordingTime)}
               </span>
-              <Button size="sm" variant="destructive" onClick={handleStopRecording} className="h-6 text-xs">
-                Stop
+              <Button size="sm" onClick={handleStopRecording} className="h-6 text-xs bg-green-600 hover:bg-green-700 text-white">
+                End and Submit Audio
               </Button>
             </>
           ) : (
