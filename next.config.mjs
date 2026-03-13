@@ -5,6 +5,10 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
   },
+  // Ensure the font TTF is bundled in the Vercel Lambda
+  outputFileTracingIncludes: {
+    "**": ["./src/lib/fonts/**"],
+  },
   images: {
     remotePatterns: [
       {
