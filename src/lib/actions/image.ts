@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import type { MainSectionContent } from "@/types";
 import { revalidatePath } from "next/cache";
+import { applyTextOverlay } from "@/lib/text-overlay";
 
 const CONCEPT_PROMPT_TEMPLATE = `You are an editorial visual concept designer for a high-end magazine (like The Economist or Bloomberg Businessweek).
 
@@ -53,11 +54,17 @@ export async function generateImage(
     throw new Error("OPENAI_API_KEY is not set. Add it to your .env file.");
   }
 
-  // Fetch the section
-  const section = await prisma.generatedSection.findUnique({
-    where: { id: sectionId },
-    include: { linkItem: true },
-  });
+  // Fetch the section + issue publish date in parallel
+  const [section, issue] = await Promise.all([
+    prisma.generatedSection.findUnique({
+      where: { id: sectionId },
+      include: { linkItem: true },
+    }),
+    prisma.issue.findUnique({
+      where: { id: issueId },
+      select: { publishDate: true },
+    }),
+  ]);
 
   if (!section) throw new Error("Section not found");
 
@@ -135,18 +142,22 @@ export async function generateImage(
     throw new Error("OpenAI did not return an image. Try again.");
   }
 
+  // Apply text overlay: "[ WEEKLY SNAPSHOT ]" + date
+  const publishDate = issue?.publishDate ?? null;
+  const finalImageData = await applyTextOverlay(imageData, publishDate);
+
   // Save to database
   await prisma.generatedImage.create({
     data: {
       issueId,
       sectionId,
       prompt,
-      imageData,
+      imageData: finalImageData,
       mimeType,
     },
   });
 
   revalidatePath(`/issues/${issueId}`);
 
-  return { imageData, mimeType };
+  return { imageData: finalImageData, mimeType };
 }
