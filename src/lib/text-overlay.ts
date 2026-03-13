@@ -104,6 +104,8 @@ export async function applyTextOverlay(
       <stop offset="100%" stop-color="#000000" stop-opacity="0.70"/>
     </linearGradient>
   </defs>
+  <!-- Global 50% black veil for consistent contrast -->
+  <rect x="0" y="0" width="${W}" height="${H}" fill="black" fill-opacity="0.50"/>
   <rect x="0" y="${gradientY}" width="${W}" height="${gradientH}" fill="url(#g)"/>
   <path d="${titlePath}" fill="white"/>
   ${datePath ? `<path d="${datePath}" fill="rgba(255,255,255,0.85)"/>` : ""}
