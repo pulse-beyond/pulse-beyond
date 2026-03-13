@@ -5,10 +5,8 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
   },
-  // Ensure the font TTF is bundled in the Vercel Lambda
-  outputFileTracingIncludes: {
-    "**": ["./src/lib/fonts/**"],
-  },
+  // sharp uses native bindings — tell Next.js not to try to bundle it
+  serverExternalPackages: ["sharp"],
   images: {
     remotePatterns: [
       {
