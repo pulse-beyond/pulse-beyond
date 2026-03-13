@@ -338,10 +338,9 @@ function SubjectGroupCard({
         <div className="flex flex-wrap items-center gap-2">
           {primaryLink.audioTranscript ? (
             <div className="w-full">
-              <span className="text-xs text-green-700 font-medium">Voice memo transcribed</span>
-              <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-2">
-                &ldquo;{primaryLink.audioTranscript}&rdquo;
-              </p>
+              <span className="text-xs text-green-700 font-medium">
+                ✓ Voice memo recorded — will be used to build the draft.
+              </span>
             </div>
           ) : transcribing ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
