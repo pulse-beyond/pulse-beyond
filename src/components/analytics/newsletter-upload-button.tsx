@@ -1,19 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ImageIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { uploadLinkedInExcel } from "@/lib/actions/analytics";
+import { uploadNewsletterScreenshot } from "@/lib/actions/analytics";
 
-export function ExcelUploadButton() {
+export function NewsletterUploadButton() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     setLoading(true);
     setStatus("idle");
@@ -21,8 +21,8 @@ export function ExcelUploadButton() {
 
     try {
       const formData = new FormData();
-      for (const file of files) formData.append("files", file);
-      const result = await uploadLinkedInExcel(formData);
+      formData.append("image", file);
+      const result = await uploadNewsletterScreenshot(formData);
 
       if (result?.error) {
         setStatus("error");
@@ -36,7 +36,6 @@ export function ExcelUploadButton() {
       setErrorMsg("Erro inesperado. Tente novamente.");
     } finally {
       setLoading(false);
-      // Reset input so same file can be re-uploaded
       if (inputRef.current) inputRef.current.value = "";
     }
   }
@@ -46,8 +45,7 @@ export function ExcelUploadButton() {
       <input
         ref={inputRef}
         type="file"
-        accept=".xlsx,.xls"
-        multiple
+        accept="image/png,image/jpeg,image/jpg,image/webp"
         className="hidden"
         onChange={handleFileChange}
       />
@@ -63,18 +61,23 @@ export function ExcelUploadButton() {
         ) : status === "success" ? (
           <CheckCircle2 className="h-4 w-4 text-green-600" />
         ) : (
-          <Upload className="h-4 w-4" />
+          <ImageIcon className="h-4 w-4" />
         )}
         {loading
-          ? "Importando..."
+          ? "Extraindo dados..."
           : status === "success"
-          ? "Importado!"
-          : "Importar Excel(s) do LinkedIn"}
+          ? "Dados extraídos!"
+          : "Importar screenshot da newsletter"}
       </Button>
       {status === "error" && errorMsg && (
         <p className="flex items-center gap-1 text-xs text-red-600">
           <AlertCircle className="h-3.5 w-3.5" />
           {errorMsg}
+        </p>
+      )}
+      {status === "idle" && !loading && (
+        <p className="text-xs text-muted-foreground">
+          Claude Vision extrai os números automaticamente
         </p>
       )}
     </div>

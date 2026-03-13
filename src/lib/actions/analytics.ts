@@ -97,9 +97,9 @@ function xlsxDateToISO(v: unknown): string | null {
 
 const DOW_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
-// ─── Excel Parser ────────────────────────────────────────────────────────────
+// ─── Parsed result type ───────────────────────────────────────────────────────
 
-function parseLinkedInExcel(buffer: Buffer): {
+interface ParsedLinkedIn {
   periodStart: Date;
   periodEnd: Date;
   totalImpressions: number;
@@ -111,7 +111,101 @@ function parseLinkedInExcel(buffer: Buffer): {
   dayOfWeekMetrics: DayOfWeekMetric[];
   topPosts: TopPost[];
   demographics: Demographic[];
-} {
+}
+
+// ─── Aggregation helpers (shared between parser + merge) ─────────────────────
+
+function aggregateMonthly(daily: DailyMetric[]): MonthlyMetric[] {
+  const map = new Map<string, { impressions: number; engagements: number }>();
+  for (const d of daily) {
+    const month = d.date.slice(0, 7);
+    const existing = map.get(month) ?? { impressions: 0, engagements: 0 };
+    map.set(month, {
+      impressions: existing.impressions + d.impressions,
+      engagements: existing.engagements + d.engagements,
+    });
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, v]) => ({
+      month,
+      impressions: v.impressions,
+      engagements: v.engagements,
+      engagementRate: v.impressions > 0 ? (v.engagements / v.impressions) * 100 : 0,
+    }));
+}
+
+function aggregateDOW(daily: DailyMetric[]): DayOfWeekMetric[] {
+  const dowMap = new Map<number, { impressions: number; engagements: number; count: number }>();
+  for (let i = 0; i < 7; i++) dowMap.set(i, { impressions: 0, engagements: 0, count: 0 });
+  for (const d of daily) {
+    const dow = new Date(d.date + "T12:00:00Z").getUTCDay();
+    const existing = dowMap.get(dow)!;
+    dowMap.set(dow, {
+      impressions: existing.impressions + d.impressions,
+      engagements: existing.engagements + d.engagements,
+      count: existing.count + 1,
+    });
+  }
+  return Array.from(dowMap.entries()).map(([dow, v]) => ({
+    day: DOW_LABELS[dow],
+    impressions: v.count > 0 ? Math.round(v.impressions / v.count) : 0,
+    engagements: v.count > 0 ? Math.round(v.engagements / v.count) : 0,
+    engagementRate: v.count > 0 && v.impressions > 0 ? (v.engagements / v.impressions) * 100 : 0,
+    count: v.count,
+  }));
+}
+
+// ─── Merge two parsed results (imp + eng files) ───────────────────────────────
+
+function mergeLinkedInParsed(a: ParsedLinkedIn, b: ParsedLinkedIn): ParsedLinkedIn {
+  // Merge daily metrics: union by date, prefer higher impressions on conflict
+  const dailyMap = new Map<string, DailyMetric>();
+  for (const d of [...a.dailyMetrics, ...b.dailyMetrics]) {
+    const existing = dailyMap.get(d.date);
+    if (!existing || d.impressions > existing.impressions) dailyMap.set(d.date, d);
+  }
+  const dailyMetrics = Array.from(dailyMap.values()).sort((x, y) => x.date.localeCompare(y.date));
+
+  // Merge top posts: union by URL, keep highest engagements per URL
+  const postsMap = new Map<string, TopPost>();
+  for (const p of [...a.topPosts, ...b.topPosts]) {
+    const existing = postsMap.get(p.url);
+    if (!existing || p.engagements > existing.engagements) postsMap.set(p.url, p);
+  }
+  const topPosts = Array.from(postsMap.values())
+    .sort((x, y) => y.engagementRate - x.engagementRate)
+    .slice(0, 100);
+
+  // Merge demographics: union by category+name
+  const demoMap = new Map<string, Demographic>();
+  for (const d of [...a.demographics, ...b.demographics]) {
+    const key = `${d.category}::${d.name}`;
+    if (!demoMap.has(key)) demoMap.set(key, d);
+  }
+
+  const totalImpressions = dailyMetrics.reduce((s, d) => s + d.impressions, 0);
+  const totalEngagements = dailyMetrics.reduce((s, d) => s + d.engagements, 0);
+  const dates = dailyMetrics.map((d) => new Date(d.date).getTime()).filter(Boolean);
+
+  return {
+    periodStart: new Date(Math.min(a.periodStart.getTime(), b.periodStart.getTime())),
+    periodEnd: new Date(Math.max(a.periodEnd.getTime(), b.periodEnd.getTime())),
+    totalImpressions,
+    totalEngagements,
+    totalFollowers: Math.max(a.totalFollowers, b.totalFollowers),
+    newFollowers: Math.max(a.newFollowers, b.newFollowers),
+    dailyMetrics,
+    monthlyMetrics: aggregateMonthly(dailyMetrics),
+    dayOfWeekMetrics: aggregateDOW(dailyMetrics),
+    topPosts,
+    demographics: Array.from(demoMap.values()),
+  };
+}
+
+// ─── Excel Parser ────────────────────────────────────────────────────────────
+
+function parseLinkedInExcel(buffer: Buffer): ParsedLinkedIn {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
 
   // ── ENGAGEMENT sheet → daily metrics ──────────────────────────────────────
@@ -139,45 +233,9 @@ function parseLinkedInExcel(buffer: Buffer): {
   const totalImpressions = dailyMetrics.reduce((s, d) => s + d.impressions, 0);
   const totalEngagements = dailyMetrics.reduce((s, d) => s + d.engagements, 0);
 
-  // ── Monthly metrics ────────────────────────────────────────────────────────
-  const monthMap = new Map<string, { impressions: number; engagements: number }>();
-  for (const d of dailyMetrics) {
-    const month = d.date.slice(0, 7); // "2025-10"
-    const existing = monthMap.get(month) ?? { impressions: 0, engagements: 0 };
-    monthMap.set(month, {
-      impressions: existing.impressions + d.impressions,
-      engagements: existing.engagements + d.engagements,
-    });
-  }
-  const monthlyMetrics: MonthlyMetric[] = Array.from(monthMap.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, v]) => ({
-      month,
-      impressions: v.impressions,
-      engagements: v.engagements,
-      engagementRate: v.impressions > 0 ? (v.engagements / v.impressions) * 100 : 0,
-    }));
-
-  // ── Day-of-week metrics ────────────────────────────────────────────────────
-  const dowMap = new Map<number, { impressions: number; engagements: number; count: number }>();
-  for (let i = 0; i < 7; i++) dowMap.set(i, { impressions: 0, engagements: 0, count: 0 });
-  for (const d of dailyMetrics) {
-    const dow = new Date(d.date + "T12:00:00Z").getUTCDay();
-    const existing = dowMap.get(dow)!;
-    dowMap.set(dow, {
-      impressions: existing.impressions + d.impressions,
-      engagements: existing.engagements + d.engagements,
-      count: existing.count + 1,
-    });
-  }
-  const dayOfWeekMetrics: DayOfWeekMetric[] = Array.from(dowMap.entries()).map(([dow, v]) => ({
-    day: DOW_LABELS[dow],
-    impressions: v.count > 0 ? Math.round(v.impressions / v.count) : 0,
-    engagements: v.count > 0 ? Math.round(v.engagements / v.count) : 0,
-    engagementRate:
-      v.count > 0 && v.impressions > 0 ? (v.engagements / v.impressions) * 100 : 0,
-    count: v.count,
-  }));
+  // ── Monthly + day-of-week ──────────────────────────────────────────────────
+  const monthlyMetrics = aggregateMonthly(dailyMetrics);
+  const dayOfWeekMetrics = aggregateDOW(dailyMetrics);
 
   // ── TOP POSTS sheet ────────────────────────────────────────────────────────
   const postsSheet = findSheet(wb, ["top post", "top_post", "posts"]);
@@ -299,23 +357,29 @@ function parseLinkedInExcel(buffer: Buffer): {
 export async function uploadLinkedInExcel(
   formData: FormData
 ): Promise<{ error?: string }> {
-  const file = formData.get("file") as File | null;
-  if (!file) return { error: "Nenhum arquivo enviado." };
+  const files = formData.getAll("files") as File[];
+  if (!files || files.length === 0) return { error: "Nenhum arquivo enviado." };
 
-  const allowedTypes = [
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-excel",
-    "application/octet-stream",
-  ];
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext !== "xlsx" && ext !== "xls") {
-    return { error: "Apenas arquivos .xlsx ou .xls são aceitos." };
+  for (const f of files) {
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (ext !== "xlsx" && ext !== "xls") {
+      return { error: `Arquivo "${f.name}" inválido. Apenas .xlsx ou .xls são aceitos.` };
+    }
   }
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const parsed = parseLinkedInExcel(buffer);
+    // Parse each file
+    const parsedList: ParsedLinkedIn[] = [];
+    for (const f of files) {
+      const arrayBuffer = await f.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      parsedList.push(parseLinkedInExcel(buffer));
+    }
+
+    // Merge all parsed results into one
+    const parsed = parsedList.length === 1
+      ? parsedList[0]
+      : parsedList.reduce((acc, cur) => mergeLinkedInParsed(acc, cur));
 
     await prisma.linkedInSnapshot.create({
       data: {
@@ -480,5 +544,95 @@ export async function upsertNewsletterStats(data: {
   } catch (e) {
     console.error("Error upserting newsletter stats:", e);
     return { error: "Erro ao salvar dados da newsletter." };
+  }
+}
+
+export async function uploadNewsletterScreenshot(
+  formData: FormData
+): Promise<{ error?: string }> {
+  const file = formData.get("image") as File | null;
+  if (!file) return { error: "Nenhuma imagem enviada." };
+
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  const allowed = ["png", "jpg", "jpeg", "webp", "gif"];
+  if (!ext || !allowed.includes(ext)) {
+    return { error: "Envie uma imagem PNG, JPG ou WEBP." };
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { error: "ANTHROPIC_API_KEY não configurada." };
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    // Map extension to valid Anthropic media type
+    const mediaTypeMap: Record<string, string> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+      gif: "image/gif",
+    };
+    const mediaType = mediaTypeMap[ext] ?? "image/png";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 256,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: base64 },
+              },
+              {
+                type: "text",
+                text: `Extract newsletter statistics from this screenshot. Return ONLY a JSON object with these exact integer keys: subscribers, articleViews, impressions, engagements. Use 0 if a value is not visible. No markdown, no explanation — just the raw JSON object.`,
+              },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Vision API error:", err);
+      return { error: "Erro ao processar a imagem. Tente novamente." };
+    }
+
+    const data = await response.json();
+    const text: string = data.content?.[0]?.text ?? "";
+
+    // Extract JSON from response (may be wrapped in markdown code block)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { error: "Não foi possível extrair os dados da imagem." };
+
+    const stats = JSON.parse(jsonMatch[0]);
+
+    await prisma.newsletterStats.create({
+      data: {
+        subscribers: Math.abs(parseInt(stats.subscribers) || 0),
+        articleViews: Math.abs(parseInt(stats.articleViews) || 0),
+        impressions: Math.abs(parseInt(stats.impressions) || 0),
+        engagements: Math.abs(parseInt(stats.engagements) || 0),
+      },
+    });
+
+    revalidatePath("/analytics");
+    return {};
+  } catch (e) {
+    console.error("Newsletter screenshot error:", e);
+    return { error: "Não foi possível extrair os dados. Tente com uma imagem mais nítida." };
   }
 }

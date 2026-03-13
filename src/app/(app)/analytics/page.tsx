@@ -7,11 +7,11 @@ import {
   UserPlus,
   BookOpen,
   Heart,
-  Newspaper,
 } from "lucide-react";
 import { StatCard } from "@/components/analytics/stat-card";
 import { PostTable } from "@/components/analytics/post-table";
 import { ExcelUploadButton } from "@/components/analytics/excel-upload-button";
+import { NewsletterUploadButton } from "@/components/analytics/newsletter-upload-button";
 import { MonthlyChart } from "@/components/analytics/monthly-chart";
 import { DayOfWeekChart } from "@/components/analytics/day-of-week-chart";
 import { AiInsightsCard } from "@/components/analytics/ai-insights-card";
@@ -110,11 +110,15 @@ export default async function AnalyticsPage() {
         </Card>
       ) : (
         <>
-          {newsletter && (
-            <section>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          {/* Newsletter section — shows stats if available, upload button otherwise */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Newsletter
               </h2>
+              <NewsletterUploadButton />
+            </div>
+            {newsletter ? (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatCard
                   label="Assinantes"
@@ -137,8 +141,14 @@ export default async function AnalyticsPage() {
                   icon={Heart}
                 />
               </div>
-            </section>
-          )}
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                  Faça upload do screenshot da sua newsletter para importar os dados automaticamente.
+                </CardContent>
+              </Card>
+            )}
+          </section>
 
           <section>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
@@ -257,15 +267,6 @@ export default async function AnalyticsPage() {
         </>
       )}
 
-      {hasData && !newsletter && (
-        <Card className="border-dashed">
-          <CardContent className="p-5 text-center text-sm text-muted-foreground">
-            <Newspaper className="h-6 w-6 mx-auto mb-2 opacity-30" />
-            Para exibir métricas da newsletter, registre os dados via{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">upsertNewsletterStats</code>.
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
