@@ -9,14 +9,21 @@ interface Props {
 }
 
 export function MarkAsPublishedButton({ issueId }: Props) {
+  const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handlePublish(e: React.MouseEvent) {
+  async function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!confirming) {
+      setConfirming(true);
+      setTimeout(() => setConfirming(false), 3000);
+      return;
+    }
+
     setLoading(true);
     await markAsPublished(issueId);
-    // revalidatePath causes page refresh, no need to reset state
   }
 
   if (loading) {
@@ -29,12 +36,17 @@ export function MarkAsPublishedButton({ issueId }: Props) {
 
   return (
     <button
-      onClick={handlePublish}
-      title="Mark as published — moves to Past Editions"
-      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:bg-green-50 hover:text-green-700"
+      onClick={handleClick}
+      title={confirming ? "Click again to confirm" : "Mark as published — moves to Past Editions"}
+      className={[
+        "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        confirming
+          ? "bg-green-100 text-green-700 hover:bg-green-200"
+          : "text-muted-foreground hover:bg-muted hover:text-green-700",
+      ].join(" ")}
     >
       <CheckCircle className="h-3.5 w-3.5" />
-      Publish
+      {confirming ? "Confirm?" : "Published"}
     </button>
   );
 }
