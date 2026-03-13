@@ -75,8 +75,8 @@ export async function applyTextOverlay(
     // ── Vertical positioning ────────────────────────────────────────
     const gradientH = Math.round(H * 0.38);
     const gradientY = H - gradientH;
-    const titleBaseline = H - Math.round(H * 0.115);
-    const dateBaseline = titleBaseline + Math.round(titleFontSize * 1.12);
+    const titleBaseline = H - Math.round(H * 0.19);
+    const dateBaseline = titleBaseline + Math.round(titleFontSize * 1.15);
 
     const cx = W / 2;
 
