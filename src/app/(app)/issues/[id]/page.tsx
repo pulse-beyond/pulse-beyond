@@ -9,6 +9,7 @@ import { StepEvents } from "@/components/step-events";
 import { StepShorten } from "@/components/step-shorten";
 import { StepExport } from "@/components/step-export";
 import { StepImage } from "@/components/step-image";
+import { StepLinkedIn } from "@/components/step-linkedin";
 
 interface Props {
   params: { id: string };
@@ -46,6 +47,9 @@ export default async function IssuePage({ params }: Props) {
 
   // "image" is complete if there is at least 1 generated image
   if (issue.images.length > 0) completedSteps.add("image");
+
+  // "linkedin" is complete if there is at least 1 LinkedIn post draft
+  if (issue.linkedInDrafts.length > 0) completedSteps.add("linkedin");
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -113,6 +117,12 @@ export default async function IssuePage({ params }: Props) {
               issueId={issue.id}
               sections={issue.sections.filter((s) => s.sectionType === "main")}
               latestImage={issue.images[0] || null}
+            />
+          )}
+          {currentStep === "linkedin" && (
+            <StepLinkedIn
+              issueId={issue.id}
+              latestDraft={issue.linkedInDrafts[0] || null}
             />
           )}
         </div>

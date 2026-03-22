@@ -21,11 +21,12 @@ model Issue {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  links     LinkItem[]
-  events    EventItem[]
-  sections  GeneratedSection[]
-  exports   Export[]
-  images    GeneratedImage[]
+  links          LinkItem[]
+  events         EventItem[]
+  sections       GeneratedSection[]
+  exports        Export[]
+  images         GeneratedImage[]
+  linkedInDrafts LinkedInPostDraft[]
 }
 
 model LinkItem {
@@ -136,6 +137,15 @@ model LinkedInSnapshot {
   demographics     Json     // [{category: string, name: string, percentage: number}]
   aiInsights       String?
   aiInsightsAt     DateTime?
+}
+
+model LinkedInPostDraft {
+  id        String   @id @default(cuid())
+  issueId   String
+  content   String
+  createdAt DateTime @default(now())
+
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
 // Newsletter stats — manually updated

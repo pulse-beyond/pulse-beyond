@@ -57,7 +57,8 @@ export type WorkflowStep =
   | "events"
   | "shorten"
   | "export"
-  | "image";
+  | "image"
+  | "linkedin";
 
 export const WORKFLOW_STEPS: { key: WorkflowStep; label: string }[] = [
   { key: "links", label: "Add Links" },
@@ -67,6 +68,7 @@ export const WORKFLOW_STEPS: { key: WorkflowStep; label: string }[] = [
   { key: "shorten", label: "Shorten Links" },
   { key: "export", label: "Export" },
   { key: "image", label: "Image" },
+  { key: "linkedin", label: "LinkedIn Post" },
 ];
 
 // Brain Dump — card structure returned by GPT-4o web search

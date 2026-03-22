@@ -145,6 +145,7 @@ export async function getIssue(id: string) {
       sections: { orderBy: { order: "asc" }, include: { linkItem: true } },
       exports: { orderBy: { createdAt: "desc" }, take: 1 },
       images: { orderBy: { createdAt: "desc" }, take: 1 },
+      linkedInDrafts: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 }
