@@ -226,6 +226,7 @@ function SubjectGroupCard({
   const [micError, setMicError] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { isRecording, recordingTime, startRecording, stopRecording, formatTime } = useAudioRecorder();
 
   // Group's tone note is from the primary link
@@ -276,6 +277,7 @@ function SubjectGroupCard({
 
   async function handleDeleteAudio() {
     await deleteAudioTranscript(primaryLink.id);
+    setConfirmingDelete(false);
   }
 
   return (
@@ -341,17 +343,25 @@ function SubjectGroupCard({
         {/* Voice memo — per subject, saved to primary link */}
         <div className="flex flex-wrap items-center gap-2">
           {primaryLink.audioTranscript ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-green-700 font-medium">
                 ✓ Voice memo recorded — will be used to build the draft.
               </span>
-              <button
-                onClick={handleDeleteAudio}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                title="Delete voice memo"
-              >
-                Delete
-              </button>
+              {confirmingDelete ? (
+                <>
+                  <span className="text-xs text-muted-foreground">Delete voice memo?</span>
+                  <Button size="sm" variant="destructive" className="h-6 text-xs" onClick={handleDeleteAudio}>
+                    Confirm
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmingDelete(false)}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="ghost" className="h-6 text-xs text-muted-foreground hover:text-destructive" onClick={() => setConfirmingDelete(true)}>
+                  Delete
+                </Button>
+              )}
             </div>
           ) : transcribing ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
