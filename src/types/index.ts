@@ -85,6 +85,16 @@ export interface BrainDumpCard {
   topicTags: string[]; // e.g. ["AI", "China", "Geopolitics"]
 }
 
+// Manual backlog item — user-saved URL with optional note
+export interface BacklogItem {
+  id: string;
+  url: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  note: string | null;
+  createdAt: Date;
+}
+
 // Open issue for Brain Dump "Add to Edition" dropdown
 export interface OpenIssue {
   id: string;

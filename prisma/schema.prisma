@@ -148,6 +148,15 @@ model LinkedInPostDraft {
   issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
+model BacklogItem {
+  id          String   @id @default(cuid())
+  url         String
+  metaTitle   String?
+  metaDescription String?
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
 // Newsletter stats — manually updated
 model NewsletterStats {
   id           String   @id @default(cuid())
