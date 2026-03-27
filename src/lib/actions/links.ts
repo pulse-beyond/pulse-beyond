@@ -81,6 +81,15 @@ export async function selectFinalLinks(
   revalidatePath(`/issues/${issueId}`);
 }
 
+/** Remove the audio transcript for a link */
+export async function deleteAudioTranscript(linkId: string) {
+  const link = await prisma.linkItem.update({
+    where: { id: linkId },
+    data: { audioTranscript: null },
+  });
+  revalidatePath(`/issues/${link.issueId}`);
+}
+
 /** Record and transcribe a voice memo for a link (no disk write — memory only) */
 export async function uploadAudio(
   linkId: string,

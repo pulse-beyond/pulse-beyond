@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { addLink, removeLink, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
+import { addLink, deleteAudioTranscript, removeLink, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
 import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -274,6 +274,10 @@ function SubjectGroupCard({
     }
   }
 
+  async function handleDeleteAudio() {
+    await deleteAudioTranscript(primaryLink.id);
+  }
+
   return (
     <Card className="border-l-4 border-l-primary/20">
       <CardContent className="p-4 space-y-3">
@@ -337,10 +341,17 @@ function SubjectGroupCard({
         {/* Voice memo — per subject, saved to primary link */}
         <div className="flex flex-wrap items-center gap-2">
           {primaryLink.audioTranscript ? (
-            <div className="w-full">
+            <div className="flex items-center gap-2">
               <span className="text-xs text-green-700 font-medium">
                 ✓ Voice memo recorded — will be used to build the draft.
               </span>
+              <button
+                onClick={handleDeleteAudio}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                title="Delete voice memo"
+              >
+                Delete
+              </button>
             </div>
           ) : transcribing ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
