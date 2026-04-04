@@ -1,3 +1,5 @@
+export const maxDuration = 60;
+
 import { getIssue, setIssueStep } from "@/lib/actions/issues";
 import { notFound } from "next/navigation";
 import { WORKFLOW_STEPS } from "@/types";

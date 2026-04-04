@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { fetchUrlMetadata } from "@/lib/url-metadata";
 import { revalidatePath } from "next/cache";
+import { put, del } from "@vercel/blob";
 
 /** Add a new link to an issue, fetching URL metadata automatically */
 export async function addLink(
@@ -90,7 +91,7 @@ export async function deleteAudioTranscript(linkId: string) {
   revalidatePath(`/issues/${link.issueId}`);
 }
 
-/** Record and transcribe a voice memo for a link (no disk write — memory only) */
+/** Record and transcribe a voice memo for a link */
 export async function uploadAudio(
   linkId: string,
   formData: FormData
@@ -101,20 +102,44 @@ export async function uploadAudio(
   const link = await prisma.linkItem.findUnique({ where: { id: linkId } });
   if (!link) return { error: "Link not found." };
 
-  // Transcribe directly from the in-memory File — no disk write needed
+  // 1. Save audio to Blob storage first so it's never lost if transcription fails
+  let blobUrl: string;
+  try {
+    const ext = file.name.endsWith(".webm") ? "webm" : "m4a";
+    const { url } = await put(`audio/${linkId}.${ext}`, file, {
+      access: "public",
+      addRandomSuffix: false,
+    });
+    blobUrl = url;
+  } catch (e) {
+    console.error("Blob upload failed:", e);
+    return { error: "Failed to save audio. Please try again." };
+  }
+
+  // 2. Persist the audio URL immediately so it's recoverable even if transcription fails
+  await prisma.linkItem.update({
+    where: { id: linkId },
+    data: { audioPath: blobUrl },
+  });
+
+  // 3. Transcribe
   let transcript: string;
   try {
     const { transcribeAudio } = await import("@/lib/whisper");
     transcript = await transcribeAudio(file);
   } catch (e) {
     console.error("Transcription failed:", e);
-    return { error: "Transcription failed. Please try again." };
+    // Audio is saved in Blob — user can retry later
+    revalidatePath(`/issues/${link.issueId}`);
+    return { error: "Transcription failed. Your audio was saved and can be retried." };
   }
 
+  // 4. Save transcript and clean up the Blob (no longer needed)
   await prisma.linkItem.update({
     where: { id: linkId },
-    data: { audioTranscript: transcript },
+    data: { audioTranscript: transcript, audioPath: null },
   });
+  await del(blobUrl);
 
   revalidatePath(`/issues/${link.issueId}`);
   return {};
