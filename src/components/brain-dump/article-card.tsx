@@ -128,7 +128,7 @@ export function ArticleCard({ card, openIssues }: ArticleCardProps) {
   const wasAdded = addedToIssues.size > 0;
 
   return (
-    <article className="rounded-xl border bg-card flex flex-col gap-0 hover:shadow-sm transition-shadow overflow-hidden">
+    <article className="rounded-xl border bg-card flex flex-col gap-0 hover:shadow-sm transition-shadow">
       {/* Card body */}
       <div className="p-5 flex flex-col gap-3 flex-1">
         {/* Source badge + topic tags */}
@@ -184,7 +184,7 @@ export function ArticleCard({ card, openIssues }: ArticleCardProps) {
       </div>
 
       {/* Card footer */}
-      <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between gap-2">
+      <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between gap-2 rounded-b-xl">
         {/* Published time */}
         <span className="text-[11px] text-muted-foreground shrink-0">
           {card.publishedAt}

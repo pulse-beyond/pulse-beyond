@@ -105,7 +105,7 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
   const savedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(item.createdAt));
 
   return (
-    <article className="rounded-xl border bg-card flex flex-col hover:shadow-sm transition-shadow overflow-hidden">
+    <article className="rounded-xl border bg-card flex flex-col hover:shadow-sm transition-shadow">
       <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -131,7 +131,7 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
         )}
       </div>
 
-      <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between gap-2">
+      <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between gap-2 rounded-b-xl">
         <div className="flex items-center gap-2">
           {confirmingDelete ? (
             <>
