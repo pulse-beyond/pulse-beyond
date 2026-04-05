@@ -240,8 +240,8 @@ export async function getOpenIssues(): Promise<OpenIssue[]> {
   const issues = await prisma.issue.findMany({
     orderBy: { publishDate: "asc" },
     where: {
-      // Exclude issues that have been fully completed (have an export)
-      exports: { none: {} },
+      // Show the same issues as the Create tab (exclude only published editions)
+      publishedAt: null,
     },
     select: {
       id: true,
