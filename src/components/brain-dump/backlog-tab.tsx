@@ -61,7 +61,7 @@ function EditionDropdown({ openIssues, url, onAdded }: EditionDropdownProps) {
       </button>
 
       {open && (
-        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[240px] rounded-lg border bg-white shadow-xl py-1" style={{ backgroundColor: "white" }}>
+        <div className="absolute bottom-full mb-1 left-0 z-50 min-w-[240px] max-h-64 overflow-y-auto rounded-lg border bg-white shadow-xl py-1" style={{ backgroundColor: "white" }}>
           <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Choose an edition
           </p>
