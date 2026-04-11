@@ -25,7 +25,7 @@ export async function buildExport(
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
     include: {
-      links: { where: { selected: true }, orderBy: { order: "asc" } },
+      links: { orderBy: { order: "asc" } },
       events: { where: { included: true }, orderBy: { order: "asc" } },
       sections: {
         where: { sectionType: "main" },

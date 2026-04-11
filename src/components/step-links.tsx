@@ -8,26 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LinkItem } from "@prisma/client";
+import { groupLinksBySubject } from "@/lib/link-utils";
 
 interface Props {
   issueId: string;
   links: LinkItem[];
-}
-
-/** Group key for a link: its subjectGroup if set, else its own id */
-function getGroupKey(link: LinkItem): string {
-  return link.subjectGroup ?? link.id;
-}
-
-/** Group links into ordered subjects. Returns array of [groupKey, links[]] preserving first-seen order. */
-function groupLinksBySubject(links: LinkItem[]): [string, LinkItem[]][] {
-  const map = new Map<string, LinkItem[]>();
-  for (const link of links) {
-    const key = getGroupKey(link);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(link);
-  }
-  return Array.from(map.entries());
 }
 
 export function StepLinks({ issueId, links }: Props) {

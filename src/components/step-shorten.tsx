@@ -6,6 +6,7 @@ import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LinkItem, EventItem } from "@prisma/client";
+import { groupLinksBySubject } from "@/lib/link-utils";
 
 interface Props {
   issueId: string;
@@ -49,28 +50,35 @@ export function StepShorten({ issueId, links, events }: Props) {
       </Button>
 
       {/* Link preview */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <h3 className="text-sm font-medium text-muted-foreground">
           Article Links
         </h3>
-        {links.map((link) => (
-          <Card key={link.id}>
-            <CardContent className="p-3">
-              <p className="text-sm font-medium truncate">
-                {link.metaTitle || link.url}
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground truncate flex-1">
-                  {link.url}
-                </span>
-                {link.shortUrl && (
-                  <span className="text-xs text-green-700 font-mono shrink-0">
-                    {link.shortUrl}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        {groupLinksBySubject(links).map(([groupKey, groupLinks], groupIndex) => (
+          <div key={groupKey} className="space-y-2">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide">
+              Subject {groupIndex + 1}
+            </p>
+            {groupLinks.map((link) => (
+              <Card key={link.id}>
+                <CardContent className="p-3">
+                  <p className="text-sm font-medium truncate">
+                    {link.metaTitle || link.url}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground truncate flex-1">
+                      {link.url}
+                    </span>
+                    {link.shortUrl && (
+                      <span className="text-xs text-green-700 font-mono shrink-0">
+                        {link.shortUrl}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ))}
 
         {events.filter((e) => e.sourceUrl).length > 0 && (

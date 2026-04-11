@@ -103,12 +103,17 @@ export async function uploadAudio(
   if (!link) return { error: "Link not found." };
 
   // 1. Save audio to Blob storage first so it's never lost if transcription fails
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return { error: "Audio upload is not configured. Contact support." };
+  }
   let blobUrl: string;
   try {
-    const ext = file.name.endsWith(".webm") ? "webm" : "m4a";
+    const mimeType = file.type || "audio/webm";
+    const ext = mimeType.includes("webm") ? "webm" : "m4a";
     const { url } = await put(`audio/${linkId}.${ext}`, file, {
       access: "public",
       addRandomSuffix: false,
+      contentType: mimeType,
     });
     blobUrl = url;
   } catch (e) {

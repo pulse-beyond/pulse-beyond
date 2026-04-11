@@ -220,6 +220,9 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
         <Button variant="outline" onClick={() => setIssueStep(issueId, "export")}>
           Back
         </Button>
+        <Button onClick={() => setIssueStep(issueId, "linkedin")}>
+          Next: LinkedIn Post
+        </Button>
       </div>
     </div>
   );
