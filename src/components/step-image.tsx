@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { generateImage } from "@/lib/actions/image";
-import { setIssueStep, updateImageDate } from "@/lib/actions/issues";
+import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -107,14 +107,15 @@ export function StepImage({ issueId, sections, latestImage, initialImageDate }: 
     setGenerating(true);
     setError(null);
     try {
-      // Persist the chosen date before generating so the overlay matches what the user sees.
-      if (imageDateInput) {
-        await updateImageDate(issueId, imageDateInput);
-      }
-      const result = await generateImage(issueId, selectedSectionId);
+      const result = await generateImage(
+        issueId,
+        selectedSectionId,
+        imageDateInput || undefined
+      );
       setImageData(result.imageData);
       setMimeType(result.mimeType);
     } catch (e) {
+      console.error("[StepImage] generateImage failed:", e);
       setError(e instanceof Error ? e.message : "Image generation failed.");
     } finally {
       setGenerating(false);

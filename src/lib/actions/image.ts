@@ -47,11 +47,25 @@ function buildSectionText(content: MainSectionContent): string {
  */
 export async function generateImage(
   issueId: string,
-  sectionId: string
+  sectionId: string,
+  /** Optional override (YYYY-MM-DD) for the date rendered into the overlay. Persisted if given. */
+  imageDateRaw?: string
 ): Promise<{ imageData: string; mimeType: string }> {
+  console.log("[generateImage] issueId=%s sectionId=%s imageDateRaw=%s", issueId, sectionId, imageDateRaw);
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not set. Add it to your .env file.");
+  }
+
+  // Persist the chosen date first (if any). One action, one source of truth.
+  if (imageDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(imageDateRaw)) {
+    const [y, m, d] = imageDateRaw.split("-").map(Number);
+    const imageDate = new Date(y, m - 1, d, 9, 0, 0, 0);
+    await prisma.issue.update({
+      where: { id: issueId },
+      data: { imageDate },
+    });
   }
 
   // Fetch the section + issue dates in parallel
