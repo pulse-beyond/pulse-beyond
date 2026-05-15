@@ -70,17 +70,15 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
   const [weekRange, setWeekRange] = useState<string | null>(null);
   const loadingPhrase = useLoadingPhrase(fetching);
 
-  // Display the 7-day window leading up to publication (must match events.ts server logic)
+  // Forward-looking range from publication day to the next edition (must match events.ts)
   const dateRangeLabel = publishDate
     ? (() => {
         const pub = new Date(publishDate);
-        const weekStart = new Date(pub);
-        weekStart.setDate(pub.getDate() - 7);
         const weekEnd = new Date(pub);
-        weekEnd.setDate(pub.getDate() - 1);
+        weekEnd.setDate(pub.getDate() + 7);
         const fmt = (d: Date) =>
           d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        return `${fmt(weekStart)} – ${fmt(weekEnd)}`;
+        return `${fmt(pub)} – ${fmt(weekEnd)}`;
       })()
     : null;
 

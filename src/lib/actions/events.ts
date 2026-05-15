@@ -66,15 +66,13 @@ export async function fetchUpcomingEvents(issueId: string) {
     throw new Error("Issue not found or no publish date set.");
   }
 
-  // Compute the 7-day window leading up to the publish date.
-  // For a Friday-publish edition this covers the previous Friday → Thursday — i.e. the week
-  // of news/events the newsletter is retrospecting.
+  // Forward-looking window: from the publication day through the day of the next edition.
+  // For a Friday publish this covers Friday → next Friday (8 days inclusive) — the events
+  // the reader should "keep an eye on" between now and the next issue.
   const publishDate = new Date(issue.publishDate);
   const weekStart = new Date(publishDate);
-  weekStart.setDate(publishDate.getDate() - 7);
-
   const weekEnd = new Date(publishDate);
-  weekEnd.setDate(publishDate.getDate() - 1);
+  weekEnd.setDate(publishDate.getDate() + 7);
 
   const formatDate = (d: Date) =>
     d.toLocaleDateString("en-US", {

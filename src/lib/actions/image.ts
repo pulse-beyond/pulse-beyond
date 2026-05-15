@@ -119,11 +119,12 @@ export async function generateImage(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "dall-e-3",
+      // gpt-image-1 replaces the retired dall-e-3 model. It returns base64 directly
+      // (no response_format flag). Closest landscape size to the old 1792x1024 is 1536x1024.
+      model: "gpt-image-1",
       prompt,
       n: 1,
-      size: "1792x1024",
-      response_format: "b64_json",
+      size: "1536x1024",
     }),
     signal: AbortSignal.timeout(120000),
   });
