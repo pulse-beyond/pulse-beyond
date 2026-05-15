@@ -1,7 +1,11 @@
-import { getIssues, createIssue, ensureUpcomingIssues, countPublishedIssues } from "@/lib/actions/issues";
+import {
+  getIssues,
+  ensureUpcomingIssues,
+  countPublishedIssues,
+  getUpcomingFridayOptions,
+} from "@/lib/actions/issues";
 
 export const dynamic = "force-dynamic";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardHeader,
@@ -15,6 +19,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
 import { MarkAsPublishedButton } from "@/components/mark-as-published-button";
+import { NewEditionForm } from "@/components/new-edition-form";
 
 export const metadata: Metadata = {
   title: "Create | Snapshot Builder",
@@ -22,11 +27,12 @@ export const metadata: Metadata = {
 };
 
 export default async function CreatePage() {
-  // Pre-create empty editions for every Sunday in the next 2 months
+  // Pre-create empty editions for every Friday in the next 2 months
   await ensureUpcomingIssues();
-  const [issues, publishedCount] = await Promise.all([
+  const [issues, publishedCount, fridayPresets] = await Promise.all([
     getIssues(),
     countPublishedIssues(),
+    getUpcomingFridayOptions(8),
   ]);
 
   return (
@@ -39,13 +45,11 @@ export default async function CreatePage() {
           <div>
             <h1 className="text-2xl font-bold">Create</h1>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Each edition is one Sunday issue of the Weekly Snapshot newsletter.
+              Each edition is one issue of the Weekly Snapshot newsletter (default: Friday).
             </p>
           </div>
         </div>
-        <form action={createIssue}>
-          <Button type="submit">New Edition</Button>
-        </form>
+        <NewEditionForm upcomingFridays={fridayPresets} />
       </div>
 
       {issues.length === 0 ? (

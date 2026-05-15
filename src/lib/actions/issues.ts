@@ -5,13 +5,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 /** Create a new issue and redirect to its builder page.
- *  If an edition already exists for that Sunday, appends "(versão 2)", "(versão 3)", etc. */
-export async function createIssue() {
-  const nextSunday = getNextSunday();
-  const baseTitle = `Snapshot - ${formatDate(nextSunday)}`;
+ *  Accepts an optional FormData with a `publishDate` (YYYY-MM-DD) override; defaults to next Friday.
+ *  If an edition already exists for the chosen day, appends "(versão 2)", "(versão 3)", etc. */
+export async function createIssue(formData?: FormData) {
+  const overrideRaw = formData?.get("publishDate");
+  const targetDate =
+    typeof overrideRaw === "string" && overrideRaw
+      ? parseDateInput(overrideRaw)
+      : getNextFriday();
 
-  // Count how many issues already exist for this Sunday
-  const { start, end } = dayBounds(nextSunday);
+  const baseTitle = `Snapshot - ${formatDate(targetDate)}`;
+
+  // Count how many issues already exist for this day
+  const { start, end } = dayBounds(targetDate);
   const existingCount = await prisma.issue.count({
     where: { publishDate: { gte: start, lte: end } },
   });
@@ -22,27 +28,33 @@ export async function createIssue() {
       : `${baseTitle} (versão ${existingCount + 1})`;
 
   const issue = await prisma.issue.create({
-    data: { title, publishDate: nextSunday, currentStep: "links" },
+    data: {
+      title,
+      publishDate: targetDate,
+      imageDate: targetDate,
+      currentStep: "links",
+    },
   });
 
   redirect(`/issues/${issue.id}`);
 }
 
-/** Ensure empty editions exist for every Sunday in the next 2 months.
+/** Ensure empty editions exist for every Friday in the next 2 months.
  *  Safe to call on every page load — skips dates that already have an edition. */
 export async function ensureUpcomingIssues() {
-  const sundays = getUpcomingSundays(2);
+  const fridays = getUpcomingFridays(2);
 
-  for (const sunday of sundays) {
-    const { start, end } = dayBounds(sunday);
+  for (const friday of fridays) {
+    const { start, end } = dayBounds(friday);
     const existing = await prisma.issue.findFirst({
       where: { publishDate: { gte: start, lte: end } },
     });
     if (!existing) {
       await prisma.issue.create({
         data: {
-          title: `Snapshot - ${formatDate(sunday)}`,
-          publishDate: sunday,
+          title: `Snapshot - ${formatDate(friday)}`,
+          publishDate: friday,
+          imageDate: friday,
           currentStep: "links",
         },
       });
@@ -57,6 +69,17 @@ export async function updateIssueTitle(issueId: string, title: string) {
   await prisma.issue.update({
     where: { id: issueId },
     data: { title },
+  });
+  revalidatePath(`/issues/${issueId}`);
+}
+
+/** Persist the date that should be rendered into the cover image overlay.
+ *  Accepts a `YYYY-MM-DD` string (from <input type="date">). */
+export async function updateImageDate(issueId: string, rawDate: string) {
+  const imageDate = parseDateInput(rawDate);
+  await prisma.issue.update({
+    where: { id: issueId },
+    data: { imageDate },
   });
   revalidatePath(`/issues/${issueId}`);
 }
@@ -150,34 +173,53 @@ export async function getIssue(id: string) {
   });
 }
 
-function getNextSunday(): Date {
+/** Returns the upcoming Friday (today included if today is a Friday before 9 AM), at 9 AM. */
+function getNextFriday(): Date {
   const now = new Date();
-  const day = now.getDay();
-  const diff = day === 0 ? 7 : 7 - day;
+  const day = now.getDay(); // 0=Sun, 5=Fri
+  const diff = (5 - day + 7) % 7 || 7; // always strictly future
   const next = new Date(now);
   next.setDate(now.getDate() + diff);
   next.setHours(9, 0, 0, 0);
   return next;
 }
 
-/** Returns all Sundays (at 9 AM) from next Sunday up to N months from now */
-function getUpcomingSundays(months: number): Date[] {
-  const sundays: Date[] = [];
+/** Returns all Fridays (at 9 AM) from next Friday up to N months from now */
+function getUpcomingFridays(months: number): Date[] {
+  const fridays: Date[] = [];
   const now = new Date();
 
-  // End boundary: N months from today
   const end = new Date(now);
   end.setMonth(end.getMonth() + months);
 
-  // Start from next Sunday
-  const cursor = getNextSunday();
+  const cursor = getNextFriday();
 
   while (cursor <= end) {
-    sundays.push(new Date(cursor));
+    fridays.push(new Date(cursor));
     cursor.setDate(cursor.getDate() + 7);
   }
 
-  return sundays;
+  return fridays;
+}
+
+/** Parse a `YYYY-MM-DD` string (from <input type="date">) into a local-time Date at 9 AM. */
+function parseDateInput(raw: string): Date {
+  const [y, m, d] = raw.split("-").map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1, 9, 0, 0, 0);
+  return date;
+}
+
+/** List of the next N Fridays as ISO date strings (YYYY-MM-DD), for UI presets. */
+export async function getUpcomingFridayOptions(count: number = 8): Promise<string[]> {
+  const fridays = getUpcomingFridays(3).slice(0, count);
+  return fridays.map((d) => toDateInputValue(d));
+}
+
+function toDateInputValue(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /** Start and end of a day for date-only comparisons */

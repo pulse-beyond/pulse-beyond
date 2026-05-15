@@ -119,6 +119,9 @@ export default async function IssuePage({ params }: Props) {
               issueId={issue.id}
               sections={issue.sections.filter((s) => s.sectionType === "main")}
               latestImage={issue.images[0] || null}
+              initialImageDate={
+                (issue.imageDate ?? issue.publishDate)?.toISOString() ?? null
+              }
             />
           )}
           {currentStep === "linkedin" && (

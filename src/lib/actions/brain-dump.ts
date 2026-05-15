@@ -47,12 +47,16 @@ EXCLUDE:
 TONE: Intellectually curious, never sensationalist. Global and multipolar. Analytically honest. Forward-looking.
 `.trim();
 
-// ─── Edition window: last Sunday → next Saturday ─────────────────────────────
+// ─── Edition window: last Friday → next Thursday ─────────────────────────────
+// Editions ship on Friday (default), so the 7-day window leading up to (and ending the day
+// before) the next Friday is what feeds the upcoming edition.
 
 function getEditionWindowForDate(date: Date): { start: Date; end: Date } {
-  const dayOfWeek = date.getDay(); // 0 = Sunday
+  const dayOfWeek = date.getDay(); // 0=Sun, 5=Fri
+  // Distance back to the most recent Friday (0 if today is Friday).
+  const daysSinceLastFriday = dayOfWeek >= 5 ? dayOfWeek - 5 : dayOfWeek + 2;
   const start = new Date(date);
-  start.setDate(date.getDate() - dayOfWeek);
+  start.setDate(date.getDate() - daysSinceLastFriday);
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);

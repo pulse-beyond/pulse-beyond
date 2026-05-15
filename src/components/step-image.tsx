@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { generateImage } from "@/lib/actions/image";
-import { setIssueStep } from "@/lib/actions/issues";
+import { setIssueStep, updateImageDate } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import type { GeneratedSection, LinkItem, GeneratedImage } from "@prisma/client";
 import type { MainSectionContent } from "@/types";
@@ -14,6 +15,17 @@ interface Props {
   issueId: string;
   sections: SectionWithLink[];
   latestImage: GeneratedImage | null;
+  /** ISO string of the persisted image date (already falls back to publishDate on the server). */
+  initialImageDate: string | null;
+}
+
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 const LOADING_PHRASES = [
@@ -73,9 +85,12 @@ function getSectionTitle(section: GeneratedSection): string {
   }
 }
 
-export function StepImage({ issueId, sections, latestImage }: Props) {
+export function StepImage({ issueId, sections, latestImage, initialImageDate }: Props) {
   const [selectedSectionId, setSelectedSectionId] = useState<string>(
     latestImage?.sectionId || ""
+  );
+  const [imageDateInput, setImageDateInput] = useState<string>(
+    toDateInputValue(initialImageDate)
   );
   const [generating, setGenerating] = useState(false);
   const [imageData, setImageData] = useState<string | null>(
@@ -92,6 +107,10 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
     setGenerating(true);
     setError(null);
     try {
+      // Persist the chosen date before generating so the overlay matches what the user sees.
+      if (imageDateInput) {
+        await updateImageDate(issueId, imageDateInput);
+      }
       const result = await generateImage(issueId, selectedSectionId);
       setImageData(result.imageData);
       setMimeType(result.mimeType);
@@ -167,6 +186,24 @@ export function StepImage({ issueId, sections, latestImage }: Props) {
             );
           })}
         </div>
+      </div>
+
+      {/* Date overlay picker */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium" htmlFor="image-date">
+          Data exibida na imagem
+        </label>
+        <Input
+          id="image-date"
+          type="date"
+          value={imageDateInput}
+          onChange={(e) => setImageDateInput(e.target.value)}
+          className="w-44"
+          disabled={generating}
+        />
+        <p className="text-xs text-muted-foreground">
+          Padrão: data de publicação da edição. Mudar aqui regenera a imagem com a nova data.
+        </p>
       </div>
 
       {/* Generate button */}

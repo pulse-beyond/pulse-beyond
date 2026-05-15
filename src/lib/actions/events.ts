@@ -66,13 +66,15 @@ export async function fetchUpcomingEvents(issueId: string) {
     throw new Error("Issue not found or no publish date set.");
   }
 
-  // Compute Monday-Saturday range from the publish date (Sunday)
+  // Compute the 7-day window leading up to the publish date.
+  // For a Friday-publish edition this covers the previous Friday → Thursday — i.e. the week
+  // of news/events the newsletter is retrospecting.
   const publishDate = new Date(issue.publishDate);
-  const monday = new Date(publishDate);
-  monday.setDate(publishDate.getDate() + 1); // Sunday + 1 = Monday
+  const weekStart = new Date(publishDate);
+  weekStart.setDate(publishDate.getDate() - 7);
 
-  const saturday = new Date(monday);
-  saturday.setDate(monday.getDate() + 5); // Monday + 5 = Saturday
+  const weekEnd = new Date(publishDate);
+  weekEnd.setDate(publishDate.getDate() - 1);
 
   const formatDate = (d: Date) =>
     d.toLocaleDateString("en-US", {
@@ -81,8 +83,8 @@ export async function fetchUpcomingEvents(issueId: string) {
       year: "numeric",
     });
 
-  const weekStartDate = formatDate(monday);
-  const weekEndDate = formatDate(saturday);
+  const weekStartDate = formatDate(weekStart);
+  const weekEndDate = formatDate(weekEnd);
 
   // Scrape Control Risks calendar for context
   const calendarContext = await scrapeControlRisksCalendar();

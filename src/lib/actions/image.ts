@@ -54,7 +54,7 @@ export async function generateImage(
     throw new Error("OPENAI_API_KEY is not set. Add it to your .env file.");
   }
 
-  // Fetch the section + issue publish date in parallel
+  // Fetch the section + issue dates in parallel
   const [section, issue] = await Promise.all([
     prisma.generatedSection.findUnique({
       where: { id: sectionId },
@@ -62,7 +62,7 @@ export async function generateImage(
     }),
     prisma.issue.findUnique({
       where: { id: issueId },
-      select: { publishDate: true },
+      select: { publishDate: true, imageDate: true },
     }),
   ]);
 
@@ -142,9 +142,10 @@ export async function generateImage(
     throw new Error("OpenAI did not return an image. Try again.");
   }
 
-  // Apply text overlay: "[ WEEKLY SNAPSHOT ]" + date
-  const publishDate = issue?.publishDate ?? null;
-  const finalImageData = await applyTextOverlay(imageData, publishDate);
+  // Apply text overlay: "[ WEEKLY SNAPSHOT ]" + date.
+  // Prefer imageDate (user-overridable) and fall back to publishDate.
+  const overlayDate = issue?.imageDate ?? issue?.publishDate ?? null;
+  const finalImageData = await applyTextOverlay(imageData, overlayDate);
 
   // Save to database
   await prisma.generatedImage.create({

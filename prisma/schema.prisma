@@ -12,8 +12,10 @@ datasource db {
 model Issue {
   id        String   @id @default(cuid())
   title     String   @default("Untitled Issue")
-  // Which Sunday this issue is for
+  // The day this issue is targeted for publication (default Friday; user can override)
   publishDate DateTime?
+  // Date rendered into the cover image overlay (defaults to publishDate; can be overridden in the image step)
+  imageDate DateTime?
   // Current step in the workflow: "links" | "select" | "generate" | "events" | "shorten" | "export"
   currentStep String  @default("links")
   // Set when the user marks this edition as published — moves it to Past Editions
