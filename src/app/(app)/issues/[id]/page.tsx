@@ -1,4 +1,5 @@
-export const maxDuration = 60;
+// gpt-image-1 commonly takes 30–90s. Hobby caps at 60; Pro allows up to 300.
+export const maxDuration = 300;
 
 import { getIssue, setIssueStep } from "@/lib/actions/issues";
 import { notFound } from "next/navigation";
