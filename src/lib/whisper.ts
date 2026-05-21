@@ -3,6 +3,11 @@
  * Accepts a File object directly — no disk read/write needed.
  * Retries up to 3 times on server errors or empty responses.
  */
+// A 5-minute recording can take a while to transcribe. Cap each attempt at 120s
+// and the whole operation at 240s so it stays within the 300s serverless budget.
+const ATTEMPT_TIMEOUT_MS = 120_000;
+const TOTAL_BUDGET_MS = 240_000;
+
 export async function transcribeAudio(file: File): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -10,9 +15,14 @@ export async function transcribeAudio(file: File): Promise<string> {
   }
 
   const maxAttempts = 3;
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   let lastError: Error = new Error("Unknown error");
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    const attemptTimeoutMs = Math.min(ATTEMPT_TIMEOUT_MS, remainingMs);
+
     try {
       const formData = new FormData();
       formData.append("file", file, file.name);
@@ -27,7 +37,7 @@ export async function transcribeAudio(file: File): Promise<string> {
             Authorization: `Bearer ${apiKey}`,
           },
           body: formData,
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(attemptTimeoutMs),
         }
       );
 

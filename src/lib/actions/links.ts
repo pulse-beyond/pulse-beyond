@@ -149,3 +149,46 @@ export async function uploadAudio(
   revalidatePath(`/issues/${link.issueId}`);
   return {};
 }
+
+/** Re-transcribe a voice memo from the audio already saved in Blob storage */
+export async function retryTranscription(
+  linkId: string
+): Promise<{ error?: string }> {
+  const link = await prisma.linkItem.findUnique({ where: { id: linkId } });
+  if (!link) return { error: "Link not found." };
+  if (!link.audioPath) return { error: "No saved audio to transcribe." };
+
+  // 1. Download the saved audio from Blob storage
+  let file: File;
+  try {
+    const res = await fetch(link.audioPath);
+    if (!res.ok) throw new Error(`Blob fetch failed: ${res.status}`);
+    const blob = await res.blob();
+    const ext = link.audioPath.endsWith(".m4a") ? "m4a" : "webm";
+    const mimeType = ext === "m4a" ? "audio/mp4" : "audio/webm";
+    file = new File([blob], `voice-memo.${ext}`, { type: mimeType });
+  } catch (e) {
+    console.error("Failed to load saved audio:", e);
+    return { error: "Could not load the saved audio. Please try again." };
+  }
+
+  // 2. Transcribe
+  let transcript: string;
+  try {
+    const { transcribeAudio } = await import("@/lib/whisper");
+    transcript = await transcribeAudio(file);
+  } catch (e) {
+    console.error("Retry transcription failed:", e);
+    return { error: "Transcription failed again. Your audio is still saved." };
+  }
+
+  // 3. Save transcript and clean up the Blob
+  await prisma.linkItem.update({
+    where: { id: linkId },
+    data: { audioTranscript: transcript, audioPath: null },
+  });
+  await del(link.audioPath);
+
+  revalidatePath(`/issues/${link.issueId}`);
+  return {};
+}

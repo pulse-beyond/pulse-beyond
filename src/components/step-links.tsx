@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { addLink, deleteAudioTranscript, removeLink, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
+import { addLink, deleteAudioTranscript, removeLink, retryTranscription, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
 import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,9 +210,13 @@ function SubjectGroupCard({
   const [savingUrl, setSavingUrl] = useState(false);
   const [micError, setMicError] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const { isRecording, recordingTime, startRecording, stopRecording, formatTime } = useAudioRecorder();
+  const { isRecording, recordingTime, startRecording, stopRecording, formatTime } =
+    useAudioRecorder(() => {
+      void handleStopRecording();
+    });
 
   // Group's tone note is from the primary link
   const sharedToneNote = primaryLink.toneNote;
@@ -257,6 +261,21 @@ function SubjectGroupCard({
       } finally {
         setTranscribing(false);
       }
+    }
+  }
+
+  async function handleRetryTranscription() {
+    setRetrying(true);
+    setTranscriptionError(null);
+    try {
+      const result = await retryTranscription(primaryLink.id);
+      if (result?.error) setTranscriptionError(result.error);
+    } catch (e) {
+      setTranscriptionError(
+        e instanceof Error ? e.message : "Transcription failed. Please try again."
+      );
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -348,7 +367,7 @@ function SubjectGroupCard({
                 </Button>
               )}
             </div>
-          ) : transcribing ? (
+          ) : transcribing || retrying ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
               <svg className="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -358,14 +377,43 @@ function SubjectGroupCard({
             </span>
           ) : isRecording ? (
             <>
-              <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                  MAX_RECORDING_SECONDS - recordingTime <= 30
+                    ? "text-red-700"
+                    : "text-red-600"
+                }`}
+              >
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                Recording {formatTime(recordingTime)}
+                Recording {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_SECONDS)}
               </span>
+              {MAX_RECORDING_SECONDS - recordingTime <= 30 && (
+                <span className="text-xs text-red-700">
+                  Auto-stops in {MAX_RECORDING_SECONDS - recordingTime}s
+                </span>
+              )}
               <Button size="sm" onClick={handleStopRecording} className="h-6 text-xs bg-green-600 hover:bg-green-700 text-white">
                 End and Submit Audio
               </Button>
             </>
+          ) : primaryLink.audioPath ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-amber-700 font-medium">
+                Audio saved — transcription pending.
+              </span>
+              <Button size="sm" className="h-6 text-xs" onClick={handleRetryTranscription}>
+                Retry transcription
+              </Button>
+              <button
+                onClick={() => { setTranscriptionError(null); handleStartRecording(); }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Record again
+              </button>
+              {transcriptionError && (
+                <span className="text-xs text-destructive">{transcriptionError}</span>
+              )}
+            </div>
           ) : (
             <>
               <button
@@ -488,17 +536,33 @@ function LinkRow({
 
 // ---- Audio Recorder Hook ----
 
-function useAudioRecorder() {
+// Hard cap on recording length. Bounds file size and keeps transcription within
+// the serverless function budget, so long recordings can't silently time out.
+const MAX_RECORDING_SECONDS = 300;
+
+function useAudioRecorder(onAutoStop?: () => void) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoStopRef = useRef<NodeJS.Timeout | null>(null);
+  const onAutoStopRef = useRef(onAutoStop);
+  onAutoStopRef.current = onAutoStop;
+
+  function clearTimers() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (autoStopRef.current) {
+      clearTimeout(autoStopRef.current);
+      autoStopRef.current = null;
+    }
+  }
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => clearTimers();
   }, []);
 
   async function startRecording(): Promise<boolean> {
@@ -515,14 +579,20 @@ function useAudioRecorder() {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      mediaRecorder.start();
+      // Timeslice flushes a chunk every second — more robust for long recordings.
+      mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
       setRecordingTime(0);
 
       timerRef.current = setInterval(() => {
-        setRecordingTime((t) => t + 1);
+        setRecordingTime((t) => Math.min(t + 1, MAX_RECORDING_SECONDS));
       }, 1000);
+
+      // Auto-stop and submit when the recording limit is reached.
+      autoStopRef.current = setTimeout(() => {
+        onAutoStopRef.current?.();
+      }, MAX_RECORDING_SECONDS * 1000);
 
       return true;
     } catch {
@@ -549,10 +619,7 @@ function useAudioRecorder() {
 
         mediaRecorder.stream.getTracks().forEach((t) => t.stop());
 
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
+        clearTimers();
         setIsRecording(false);
         setRecordingTime(0);
         resolve(file);
