@@ -545,10 +545,10 @@ function LinkRow({
 
 // Hard cap on recording length. Bounds file size and keeps transcription within
 // the serverless function budget.
-const MAX_RECORDING_SECONDS = 300;
+const MAX_RECORDING_SECONDS = 600;
 
 // Vercel rejects request bodies over ~4.5MB with HTTP 413. A low audio bitrate
-// keeps recordings well under it — 32 kbps opus is ~1.2MB for 5 minutes and is
+// keeps recordings well under it — 32 kbps opus is ~2.4MB for 10 minutes and is
 // still perfectly clear for voice transcription.
 const AUDIO_BITS_PER_SECOND = 32000;
 
