@@ -2,7 +2,8 @@
 const nextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      // Headroom for longer voice memos (a ~10-min recording can approach 10mb).
+      bodySizeLimit: "25mb",
     },
   },
   // sharp uses native bindings — tell Next.js not to try to bundle it

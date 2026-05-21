@@ -110,9 +110,12 @@ export async function uploadAudio(
   try {
     const mimeType = file.type || "audio/webm";
     const ext = mimeType.includes("webm") ? "webm" : "m4a";
+    // allowOverwrite is required: @vercel/blob v2 throws on an existing pathname
+    // by default, which broke every re-recording of the same subject.
     const { url } = await put(`audio/${linkId}.${ext}`, file, {
       access: "public",
       addRandomSuffix: false,
+      allowOverwrite: true,
       contentType: mimeType,
     });
     blobUrl = url;
