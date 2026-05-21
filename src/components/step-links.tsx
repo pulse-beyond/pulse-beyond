@@ -227,6 +227,13 @@ function SubjectGroupCard({
   // Group's tone note is from the primary link
   const sharedToneNote = primaryLink.toneNote;
 
+  // DIAGNOSTIC: detects whether this card remounts mid-recording (which would
+  // silently wipe the recorder state and dump the user back to "Voice memo").
+  useEffect(() => {
+    console.log("[REC] SubjectGroupCard MOUNTED", primaryLink.id);
+    return () => console.log("[REC] SubjectGroupCard UNMOUNTED", primaryLink.id);
+  }, [primaryLink.id]);
+
   async function handleAddUrl() {
     const trimmed = newUrl.trim();
     if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://"))) return;
@@ -254,15 +261,20 @@ function SubjectGroupCard({
   }
 
   async function handleRecordingComplete(file: File) {
+    console.log("[REC] handleRecordingComplete: fileSize", file?.size);
     if (!file || file.size === 0) {
+      console.warn("[REC] empty file — not uploading");
       setTranscriptionError("The recording came out empty. Please record again.");
       return;
     }
     setTranscribing(true);
     setTranscriptionError(null);
     try {
+      console.log("[REC] uploading to server…");
       await onAudioUpload(primaryLink.id, file);
+      console.log("[REC] upload + transcription OK");
     } catch (e) {
+      console.error("[REC] upload/transcription error", e);
       setTranscriptionError(
         e instanceof Error ? e.message : "Transcription failed. Please try again."
       );
@@ -543,9 +555,9 @@ function LinkRow({
 
 // ---- Audio Recorder Hook ----
 
-// Hard cap on recording length. Bounds file size and keeps transcription within
-// the serverless function budget, so long recordings can't silently time out.
-const MAX_RECORDING_SECONDS = 300;
+// DIAGNOSTIC BUILD: limit temporarily shortened to 90s so the ~5-min bug can be
+// reproduced in seconds. Restore to 300 once the cause is identified.
+const MAX_RECORDING_SECONDS = 90;
 
 function useAudioRecorder(
   onComplete: (file: File) => void,
@@ -560,10 +572,14 @@ function useAudioRecorder(
   const watchdogRef = useRef<NodeJS.Timeout | null>(null);
   // Guards stopRecording so the button and the auto-stop can't both act.
   const stoppingRef = useRef(false);
+  const idRef = useRef(Math.random().toString(36).slice(2, 7));
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
   onCompleteRef.current = onComplete;
   onErrorRef.current = onError;
+
+  const log = (...args: unknown[]) =>
+    console.log(`[REC ${idRef.current}]`, ...args);
 
   function clearTimers() {
     if (timerRef.current) {
@@ -581,11 +597,17 @@ function useAudioRecorder(
   }
 
   useEffect(() => {
-    return () => clearTimers();
+    log("hook MOUNTED");
+    return () => {
+      log("hook CLEANUP / UNMOUNT");
+      clearTimers();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startRecording(): Promise<boolean> {
     try {
+      log("startRecording: requesting mic");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm")
         ? "audio/webm"
@@ -595,13 +617,19 @@ function useAudioRecorder(
       stoppingRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          if (chunksRef.current.length % 15 === 0) {
+            log("dataavailable: chunks so far", chunksRef.current.length);
+          }
+        } else {
+          log("dataavailable: EMPTY chunk");
+        }
       };
 
-      // onstop is assigned ONCE here — never per stop() call — so a manual stop
-      // and the auto-stop can never race over the handler. It delivers the file
-      // exactly once via onComplete.
       mediaRecorder.onstop = () => {
+        const bytes = chunksRef.current.reduce((s, c) => s + c.size, 0);
+        log("onstop FIRED. chunks", chunksRef.current.length, "bytes", bytes);
         clearTimers();
         setIsRecording(false);
         setRecordingTime(0);
@@ -616,7 +644,8 @@ function useAudioRecorder(
         onCompleteRef.current(file);
       };
 
-      mediaRecorder.onerror = () => {
+      mediaRecorder.onerror = (e) => {
+        console.error(`[REC ${idRef.current}]`, "onerror FIRED", e);
         clearTimers();
         setIsRecording(false);
         setRecordingTime(0);
@@ -624,8 +653,8 @@ function useAudioRecorder(
         onErrorRef.current("The recording failed. Please record again.");
       };
 
-      // Timeslice flushes a chunk every second — more robust for long recordings.
       mediaRecorder.start(1000);
+      log("recorder.start(1000) called, state", mediaRecorder.state);
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
       setRecordingTime(0);
@@ -634,29 +663,35 @@ function useAudioRecorder(
         setRecordingTime((t) => Math.min(t + 1, MAX_RECORDING_SECONDS));
       }, 1000);
 
-      // Auto-stop at the limit — exact same idempotent path as the button.
-      autoStopRef.current = setTimeout(
-        () => stopRecording(),
-        MAX_RECORDING_SECONDS * 1000
-      );
+      autoStopRef.current = setTimeout(() => {
+        log("auto-stop timeout fired");
+        stopRecording();
+      }, MAX_RECORDING_SECONDS * 1000);
 
       return true;
-    } catch {
+    } catch (e) {
+      console.error(`[REC ${idRef.current}]`, "startRecording FAILED", e);
       return false;
     }
   }
 
-  // Idempotent: the button and the auto-stop both call this; only the first
-  // call acts. The result is delivered once via onComplete / onError.
   function stopRecording() {
+    const mr = mediaRecorderRef.current;
+    log(
+      "stopRecording called. alreadyStopping?",
+      stoppingRef.current,
+      "recorderState",
+      mr?.state ?? "no-recorder"
+    );
     if (stoppingRef.current) return;
-    const mediaRecorder = mediaRecorderRef.current;
-    if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+    if (!mr || mr.state === "inactive") return;
     stoppingRef.current = true;
 
-    // Watchdog: if onstop never fires, surface an error instead of failing
-    // silently (which is exactly the "nothing happened" bug).
     watchdogRef.current = setTimeout(() => {
+      console.error(
+        `[REC ${idRef.current}]`,
+        "WATCHDOG FIRED — onstop never came"
+      );
       clearTimers();
       setIsRecording(false);
       setRecordingTime(0);
@@ -666,8 +701,10 @@ function useAudioRecorder(
     }, 15000);
 
     try {
-      mediaRecorder.stop();
-    } catch {
+      mr.stop();
+      log("mr.stop() called OK");
+    } catch (e) {
+      console.error(`[REC ${idRef.current}]`, "mr.stop() threw", e);
       clearTimers();
       setIsRecording(false);
       setRecordingTime(0);
