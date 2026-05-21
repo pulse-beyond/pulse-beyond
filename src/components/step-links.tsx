@@ -214,9 +214,15 @@ function SubjectGroupCard({
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { isRecording, recordingTime, startRecording, stopRecording, formatTime } =
-    useAudioRecorder(() => {
-      void handleStopRecording();
-    });
+    useAudioRecorder(
+      (file) => {
+        void handleRecordingComplete(file);
+      },
+      (message) => {
+        setTranscribing(false);
+        setTranscriptionError(message);
+      }
+    );
 
   // Group's tone note is from the primary link
   const sharedToneNote = primaryLink.toneNote;
@@ -247,20 +253,21 @@ function SubjectGroupCard({
     if (!ok) setMicError(true);
   }
 
-  async function handleStopRecording() {
-    const file = await stopRecording();
-    if (file) {
-      setTranscribing(true);
-      setTranscriptionError(null);
-      try {
-        await onAudioUpload(primaryLink.id, file);
-      } catch (e) {
-        setTranscriptionError(
-          e instanceof Error ? e.message : "Transcription failed. Please try again."
-        );
-      } finally {
-        setTranscribing(false);
-      }
+  async function handleRecordingComplete(file: File) {
+    if (!file || file.size === 0) {
+      setTranscriptionError("The recording came out empty. Please record again.");
+      return;
+    }
+    setTranscribing(true);
+    setTranscriptionError(null);
+    try {
+      await onAudioUpload(primaryLink.id, file);
+    } catch (e) {
+      setTranscriptionError(
+        e instanceof Error ? e.message : "Transcription failed. Please try again."
+      );
+    } finally {
+      setTranscribing(false);
     }
   }
 
@@ -392,7 +399,7 @@ function SubjectGroupCard({
                   Auto-stops in {MAX_RECORDING_SECONDS - recordingTime}s
                 </span>
               )}
-              <Button size="sm" onClick={handleStopRecording} className="h-6 text-xs bg-green-600 hover:bg-green-700 text-white">
+              <Button size="sm" onClick={stopRecording} className="h-6 text-xs bg-green-600 hover:bg-green-700 text-white">
                 End and Submit Audio
               </Button>
             </>
@@ -540,15 +547,23 @@ function LinkRow({
 // the serverless function budget, so long recordings can't silently time out.
 const MAX_RECORDING_SECONDS = 300;
 
-function useAudioRecorder(onAutoStop?: () => void) {
+function useAudioRecorder(
+  onComplete: (file: File) => void,
+  onError: (message: string) => void
+) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoStopRef = useRef<NodeJS.Timeout | null>(null);
-  const onAutoStopRef = useRef(onAutoStop);
-  onAutoStopRef.current = onAutoStop;
+  const watchdogRef = useRef<NodeJS.Timeout | null>(null);
+  // Guards stopRecording so the button and the auto-stop can't both act.
+  const stoppingRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+  onCompleteRef.current = onComplete;
+  onErrorRef.current = onError;
 
   function clearTimers() {
     if (timerRef.current) {
@@ -559,6 +574,10 @@ function useAudioRecorder(onAutoStop?: () => void) {
       clearTimeout(autoStopRef.current);
       autoStopRef.current = null;
     }
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
   }
 
   useEffect(() => {
@@ -568,15 +587,41 @@ function useAudioRecorder(onAutoStop?: () => void) {
   async function startRecording(): Promise<boolean> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "audio/mp4",
-      });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       chunksRef.current = [];
+      stoppingRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      // onstop is assigned ONCE here — never per stop() call — so a manual stop
+      // and the auto-stop can never race over the handler. It delivers the file
+      // exactly once via onComplete.
+      mediaRecorder.onstop = () => {
+        clearTimers();
+        setIsRecording(false);
+        setRecordingTime(0);
+        mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+        const type = mediaRecorder.mimeType || mimeType;
+        const ext = type.includes("webm") ? "webm" : "m4a";
+        const file = new File(
+          [new Blob(chunksRef.current, { type })],
+          `voice-memo.${ext}`,
+          { type }
+        );
+        onCompleteRef.current(file);
+      };
+
+      mediaRecorder.onerror = () => {
+        clearTimers();
+        setIsRecording(false);
+        setRecordingTime(0);
+        mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+        onErrorRef.current("The recording failed. Please record again.");
       };
 
       // Timeslice flushes a chunk every second — more robust for long recordings.
@@ -589,10 +634,11 @@ function useAudioRecorder(onAutoStop?: () => void) {
         setRecordingTime((t) => Math.min(t + 1, MAX_RECORDING_SECONDS));
       }, 1000);
 
-      // Auto-stop and submit when the recording limit is reached.
-      autoStopRef.current = setTimeout(() => {
-        onAutoStopRef.current?.();
-      }, MAX_RECORDING_SECONDS * 1000);
+      // Auto-stop at the limit — exact same idempotent path as the button.
+      autoStopRef.current = setTimeout(
+        () => stopRecording(),
+        MAX_RECORDING_SECONDS * 1000
+      );
 
       return true;
     } catch {
@@ -600,33 +646,33 @@ function useAudioRecorder(onAutoStop?: () => void) {
     }
   }
 
-  function stopRecording(): Promise<File | null> {
-    return new Promise((resolve) => {
-      const mediaRecorder = mediaRecorderRef.current;
-      if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        resolve(null);
-        return;
-      }
+  // Idempotent: the button and the auto-stop both call this; only the first
+  // call acts. The result is delivered once via onComplete / onError.
+  function stopRecording() {
+    if (stoppingRef.current) return;
+    const mediaRecorder = mediaRecorderRef.current;
+    if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+    stoppingRef.current = true;
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: mediaRecorder.mimeType,
-        });
-        const ext = mediaRecorder.mimeType.includes("webm") ? "webm" : "m4a";
-        const file = new File([blob], `voice-memo.${ext}`, {
-          type: mediaRecorder.mimeType,
-        });
+    // Watchdog: if onstop never fires, surface an error instead of failing
+    // silently (which is exactly the "nothing happened" bug).
+    watchdogRef.current = setTimeout(() => {
+      clearTimers();
+      setIsRecording(false);
+      setRecordingTime(0);
+      onErrorRef.current(
+        "Could not finalize the recording. Please record again."
+      );
+    }, 15000);
 
-        mediaRecorder.stream.getTracks().forEach((t) => t.stop());
-
-        clearTimers();
-        setIsRecording(false);
-        setRecordingTime(0);
-        resolve(file);
-      };
-
+    try {
       mediaRecorder.stop();
-    });
+    } catch {
+      clearTimers();
+      setIsRecording(false);
+      setRecordingTime(0);
+      onErrorRef.current("Could not stop the recording. Please record again.");
+    }
   }
 
   function formatTime(seconds: number): string {
