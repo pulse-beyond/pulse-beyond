@@ -4,25 +4,35 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { FeedFilters } from "./feed-filters";
 import { BacklogTab } from "./backlog-tab";
+import { TopicsTab } from "./topics-tab";
 import { BrainDumpRefreshButton } from "./brain-dump-refresh-button";
-import type { BrainDumpCard, BacklogItem, OpenIssue } from "@/types/index";
+import type { BrainDumpCard, BacklogItem, OpenIssue, BrainDumpConfig } from "@/types/index";
 
 interface BrainDumpTabsProps {
   cards: BrainDumpCard[];
   backlogItems: BacklogItem[];
   openIssues: OpenIssue[];
   fetchedAt: Date | null;
+  config: BrainDumpConfig;
 }
 
-export function BrainDumpTabs({ cards, backlogItems, openIssues, fetchedAt }: BrainDumpTabsProps) {
-  const [tab, setTab] = useState<"ai" | "manual">("ai");
+type Tab = "ai" | "manual" | "topics";
+
+export function BrainDumpTabs({ cards, backlogItems, openIssues, fetchedAt, config }: BrainDumpTabsProps) {
+  const [tab, setTab] = useState<Tab>("ai");
+
+  const label: Record<Tab, string> = {
+    ai: "AI Curated",
+    manual: `Manual Backlog${backlogItems.length > 0 ? ` (${backlogItems.length})` : ""}`,
+    topics: "Topics",
+  };
 
   return (
     <div className="space-y-6">
       {/* Tab bar */}
       <div className="flex items-center justify-between gap-4 border-b">
         <div className="flex gap-0">
-          {(["ai", "manual"] as const).map((t) => (
+          {(["ai", "manual", "topics"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -33,7 +43,7 @@ export function BrainDumpTabs({ cards, backlogItems, openIssues, fetchedAt }: Br
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {t === "ai" ? "AI Curated" : `Manual Backlog${backlogItems.length > 0 ? ` (${backlogItems.length})` : ""}`}
+              {label[t]}
             </button>
           ))}
         </div>
@@ -51,8 +61,10 @@ export function BrainDumpTabs({ cards, backlogItems, openIssues, fetchedAt }: Br
         ) : (
           <FeedFilters cards={cards} openIssues={openIssues} />
         )
-      ) : (
+      ) : tab === "manual" ? (
         <BacklogTab items={backlogItems} openIssues={openIssues} />
+      ) : (
+        <TopicsTab config={config} />
       )}
     </div>
   );

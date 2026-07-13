@@ -109,6 +109,13 @@ model BrainDumpCache {
   fetchedAt DateTime @default(now())
 }
 
+model BrainDumpConfig {
+  id          String   @id @default("singleton")
+  topics      String   // JSON-encoded BrainDumpTopic[] ({ name, description })
+  maxPerTopic Int      @default(3)
+  updatedAt   DateTime @updatedAt
+}
+
 model GeneratedImage {
   id        String   @id @default(cuid())
   issueId   String

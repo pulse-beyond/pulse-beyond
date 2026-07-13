@@ -85,6 +85,18 @@ export interface BrainDumpCard {
   topicTags: string[]; // e.g. ["AI", "China", "Geopolitics"]
 }
 
+// Editable Brain Dump topic (drives the web-search prompt)
+export interface BrainDumpTopic {
+  name: string;        // e.g. "Artificial Intelligence"
+  description: string; // keywords / sub-themes to monitor
+}
+
+// Editable Brain Dump configuration (singleton)
+export interface BrainDumpConfig {
+  topics: BrainDumpTopic[];
+  maxPerTopic: number; // max stories from any single topic per edition
+}
+
 // Manual backlog item — user-saved URL with optional note
 export interface BacklogItem {
   id: string;

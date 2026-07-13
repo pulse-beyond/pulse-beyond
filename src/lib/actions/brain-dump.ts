@@ -3,25 +3,40 @@
 import { prisma } from "@/lib/db";
 import { addLink } from "@/lib/actions/links";
 import { revalidatePath } from "next/cache";
-import type { BrainDumpCard, OpenIssue } from "@/types/index";
+import type { BrainDumpCard, BrainDumpTopic, BrainDumpConfig, OpenIssue } from "@/types/index";
+
+// ─── Default topics (used until Roberto customizes them in the Topics tab) ───
+// Order carries NO priority — the prompt treats every topic as equally important.
+
+const DEFAULT_TOPICS: BrainDumpTopic[] = [
+  { name: "Artificial Intelligence", description: "foundation models, regulation, AI in science, infrastructure, sovereignty, safety, democratization, disinformation" },
+  { name: "Robotics & Physical Computing", description: "humanoid robots, industrial automation, eVTOLs, drones, brain-computer interfaces" },
+  { name: "Semiconductors & Deep Hardware", description: "chip war (US-China-Taiwan), advanced architectures, TSMC/Intel/ASML, quantum computing" },
+  { name: "Space & Satellite Economy", description: "SpaceX/Starlink, satellite geopolitics, lunar/Martian ambitions, commercial applications" },
+  { name: "Biotechnology & Life Sciences", description: "genomics, CRISPR, longevity, regenerative medicine, AI drug discovery, biosecurity" },
+  { name: "Energy Transition & Climate", description: "EVs, nuclear (fission+fusion), renewables, carbon capture, critical minerals" },
+  { name: "Geopolitics & Strategic Competition", description: "US-China tech war, China's global expansion, Europe's competitiveness, BRICS, emerging markets" },
+  { name: "Venture Capital & Deep Tech Finance", description: "frontier tech funding, sovereign wealth funds, innovation ecosystems" },
+  { name: "Environment & Resources", description: "rare earths, water scarcity, biodiversity, food security" },
+  { name: "Digital Infrastructure", description: "5G/6G, cybersecurity, cloud, crypto/CBDCs" },
+];
+
+const DEFAULT_MAX_PER_TOPIC = 3;
 
 // ─── Editorial DNA (Roberto's content scope) ────────────────────────────────
+// The topics block is built from the editable config; everything else is fixed.
 
-const EDITORIAL_DNA = `
+function buildEditorialDNA(topics: BrainDumpTopic[]): string {
+  const topicList = topics
+    .map((t) => `- ${t.name}${t.description ? ` — ${t.description}` : ""}`)
+    .join("\n");
+
+  return `
 ABOUT THE NEWSLETTER:
 Weekly Snapshot is an intellectually serious, globally-minded newsletter that connects emerging scientific and technological developments with strategic, geopolitical, and economic consequences. Written for sophisticated readers — investors, executives, policymakers, and curious global citizens — who want to understand not just WHAT is happening, but WHY IT MATTERS and WHAT COMES NEXT.
 
-TOPICS TO MONITOR (in priority order):
-1. Artificial Intelligence — foundation models, regulation, AI in science, infrastructure, sovereignty, safety, democratization, disinformation
-2. Robotics & Physical Computing — humanoid robots, industrial automation, eVTOLs, drones, brain-computer interfaces
-3. Semiconductors & Deep Hardware — chip war (US-China-Taiwan), advanced architectures, TSMC/Intel/ASML, quantum computing
-4. Space & Satellite Economy — SpaceX/Starlink, satellite geopolitics, lunar/Martian ambitions, commercial applications
-5. Biotechnology & Life Sciences — genomics, CRISPR, longevity, regenerative medicine, AI drug discovery, biosecurity
-6. Energy Transition & Climate — EVs, nuclear (fission+fusion), renewables, carbon capture, critical minerals
-7. Geopolitics & Strategic Competition — US-China tech war, China's global expansion, Europe's competitiveness, BRICS, emerging markets
-8. Venture Capital & Deep Tech Finance — frontier tech funding, sovereign wealth funds, innovation ecosystems
-9. Environment & Resources — rare earths, water scarcity, biodiversity, food security
-10. Digital Infrastructure — 5G/6G, cybersecurity, cloud, crypto/CBDCs
+TOPICS TO MONITOR (no particular order — treat every topic as equally important):
+${topicList}
 
 EDITORIAL FILTER (apply to every story):
 - Why does this matter STRATEGICALLY? Second and third-order effects on power, markets, sovereignty, society.
@@ -46,6 +61,55 @@ EXCLUDE:
 
 TONE: Intellectually curious, never sensationalist. Global and multipolar. Analytically honest. Forward-looking.
 `.trim();
+}
+
+// ─── Config: read & write the editable topics ────────────────────────────────
+
+/** Read the Brain Dump config, falling back to defaults when none is saved yet. */
+export async function getBrainDumpConfig(): Promise<BrainDumpConfig> {
+  const row = await prisma.brainDumpConfig.findUnique({ where: { id: "singleton" } });
+  if (!row) {
+    return { topics: DEFAULT_TOPICS, maxPerTopic: DEFAULT_MAX_PER_TOPIC };
+  }
+  let topics: BrainDumpTopic[];
+  try {
+    topics = JSON.parse(row.topics) as BrainDumpTopic[];
+  } catch {
+    topics = DEFAULT_TOPICS;
+  }
+  if (!Array.isArray(topics) || topics.length === 0) topics = DEFAULT_TOPICS;
+  return { topics, maxPerTopic: row.maxPerTopic };
+}
+
+/** Persist the editable topics + per-topic cap. */
+export async function saveBrainDumpConfig(
+  config: BrainDumpConfig
+): Promise<{ success: boolean; error?: string }> {
+  // Sanitize: drop empty topics, trim fields, clamp the cap to a sane range.
+  const topics = (config.topics ?? [])
+    .map((t) => ({ name: (t.name ?? "").trim(), description: (t.description ?? "").trim() }))
+    .filter((t) => t.name.length > 0);
+
+  if (topics.length === 0) {
+    return { success: false, error: "Add at least one topic before saving." };
+  }
+
+  const maxPerTopic = Math.min(15, Math.max(1, Math.round(config.maxPerTopic || DEFAULT_MAX_PER_TOPIC)));
+
+  try {
+    const payload = JSON.stringify(topics);
+    await prisma.brainDumpConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", topics: payload, maxPerTopic },
+      update: { topics: payload, maxPerTopic },
+    });
+    revalidatePath("/brain-dump");
+    return { success: true };
+  } catch (err) {
+    console.error("Failed to save Brain Dump config:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
 
 // ─── Edition window: last Friday → next Thursday ─────────────────────────────
 // Editions ship on Friday (default), so the 7-day window leading up to (and ending the day
@@ -96,6 +160,10 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
   const startStr = formatDateLong(start);
   const endStr = formatDateLong(end);
 
+  const { topics, maxPerTopic } = await getBrainDumpConfig();
+  const editorialDNA = buildEditorialDNA(topics);
+  const minTopicAreas = Math.min(5, topics.length);
+
   const prompt = `Today is ${today}.
 
 You are a specialized research assistant for Weekly Snapshot, a weekly newsletter written by Roberto.
@@ -108,11 +176,16 @@ Do NOT include any story published before ${startStr}.
 If you cannot confirm a story was published within this exact date range, exclude it.
 Every story must be from this current week's edition window only.
 
-${EDITORIAL_DNA}
+TOPIC BALANCE — THIS IS CRITICAL:
+Include AT MOST ${maxPerTopic} stories from any single topic area. No topic may dominate the edition.
+Spread the selection across the topics below; treat them as equally important, not ranked.
+
+${editorialDNA}
 
 INSTRUCTIONS:
 - Search for real, recent stories published between ${startStr} and ${endStr} ONLY
-- Cover at least 5 different topic areas from the list above
+- Cover at least ${minTopicAreas} different topic areas from the list above
+- Never exceed ${maxPerTopic} stories from the same topic area
 - Prioritize Tier 1 sources when available
 - Include at least 2 stories from non-Western perspectives (China, India, Southeast Asia, Africa, Latin America, Middle East)
 - All output must be in English

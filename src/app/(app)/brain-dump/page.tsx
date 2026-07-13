@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Lightbulb } from "lucide-react";
 import { BrainDumpTabs } from "@/components/brain-dump/brain-dump-tabs";
-import { getCachedBrainDump, getOpenIssues } from "@/lib/actions/brain-dump";
+import { getCachedBrainDump, getOpenIssues, getBrainDumpConfig } from "@/lib/actions/brain-dump";
 import { getBacklogItems } from "@/lib/actions/backlog";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +12,11 @@ export const metadata: Metadata = {
 };
 
 export default async function BrainDumpPage() {
-  const [{ cards, fetchedAt }, openIssues, backlogItems] = await Promise.all([
+  const [{ cards, fetchedAt }, openIssues, backlogItems, config] = await Promise.all([
     getCachedBrainDump(),
     getOpenIssues(),
     getBacklogItems(),
+    getBrainDumpConfig(),
   ]);
 
   return (
@@ -38,6 +39,7 @@ export default async function BrainDumpPage() {
         backlogItems={backlogItems}
         openIssues={openIssues}
         fetchedAt={fetchedAt}
+        config={config}
       />
     </div>
   );
