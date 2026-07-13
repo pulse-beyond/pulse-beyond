@@ -357,6 +357,71 @@ export async function getCachedBrainDump(): Promise<{
   };
 }
 
+// ─── Topic balancing (the hard cap that actually curbs AI dominance) ─────────
+// GPT fragments AI into many labels ("AI Models", "AI Investment", "Enterprise AI"…),
+// so a prompt-level cap can't hold. We bucket each card into a canonical topic and
+// enforce the per-topic cap in code, at display time — deterministic, config-driven.
+
+function firstToken(s: string): string {
+  return (s ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)[0] ?? "";
+}
+
+/** Map a card's free-form primary topic onto one of the configured topics. */
+function canonicalTopic(rawTopic: string, topics: BrainDumpTopic[]): string {
+  const raw = (rawTopic ?? "").trim();
+  if (!raw) return "Other";
+  const rawFirst = firstToken(raw);
+  // Fold every AI variant ("AI", "Artificial Intelligence", "Enterprise AI"…) together.
+  const isAI = rawFirst === "ai" || raw.toLowerCase().includes("artificial intelligence");
+  for (const t of topics) {
+    const nameFirst = firstToken(t.name);
+    if (isAI && (nameFirst === "artificial" || nameFirst === "ai")) return t.name;
+    if (nameFirst && nameFirst === rawFirst) return t.name;
+  }
+  return raw; // unknown topic → its own bucket, still capped independently
+}
+
+/** Keep at most `maxPerTopic` cards per canonical topic, preserving order. */
+function balanceByTopic(
+  cards: BrainDumpCard[],
+  topics: BrainDumpTopic[],
+  maxPerTopic: number
+): BrainDumpCard[] {
+  const counts = new Map<string, number>();
+  const kept: BrainDumpCard[] = [];
+  for (const card of cards) {
+    const bucket = canonicalTopic(card.topic, topics);
+    const n = counts.get(bucket) ?? 0;
+    if (n < maxPerTopic) {
+      counts.set(bucket, n + 1);
+      kept.push(card);
+    }
+  }
+  return kept;
+}
+
+/** Read the cache and apply the per-topic cap for display.
+ *  `totalCached` is the raw count before balancing (so the UI can show "X of Y"). */
+export async function getBalancedBrainDump(): Promise<{
+  cards: BrainDumpCard[];
+  fetchedAt: Date | null;
+  totalCached: number;
+}> {
+  const [{ cards, fetchedAt }, config] = await Promise.all([
+    getCachedBrainDump(),
+    getBrainDumpConfig(),
+  ]);
+  return {
+    cards: balanceByTopic(cards, config.topics, config.maxPerTopic),
+    fetchedAt,
+    totalCached: cards.length,
+  };
+}
+
 const CARD_CAP = 50;
 
 const EXCLUDED_DOMAINS = ["wikipedia.org", "wikimedia.org", "wikidata.org", "wiki."];
