@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { addLink } from "@/lib/actions/links";
 import { revalidatePath } from "next/cache";
 import type { BrainDumpCard, BrainDumpTopic, BrainDumpConfig, OpenIssue } from "@/types/index";
+import { canonicalTopic } from "@/lib/topics";
 
 // ─── Default topics (used until Roberto customizes them in the Topics tab) ───
 // Order carries NO priority — the prompt treats every topic as equally important.
@@ -361,29 +362,6 @@ export async function getCachedBrainDump(): Promise<{
 // GPT fragments AI into many labels ("AI Models", "AI Investment", "Enterprise AI"…),
 // so a prompt-level cap can't hold. We bucket each card into a canonical topic and
 // enforce the per-topic cap in code, at display time — deterministic, config-driven.
-
-function firstToken(s: string): string {
-  return (s ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .trim()
-    .split(/\s+/)[0] ?? "";
-}
-
-/** Map a card's free-form primary topic onto one of the configured topics. */
-function canonicalTopic(rawTopic: string, topics: BrainDumpTopic[]): string {
-  const raw = (rawTopic ?? "").trim();
-  if (!raw) return "Other";
-  const rawFirst = firstToken(raw);
-  // Fold every AI variant ("AI", "Artificial Intelligence", "Enterprise AI"…) together.
-  const isAI = rawFirst === "ai" || raw.toLowerCase().includes("artificial intelligence");
-  for (const t of topics) {
-    const nameFirst = firstToken(t.name);
-    if (isAI && (nameFirst === "artificial" || nameFirst === "ai")) return t.name;
-    if (nameFirst && nameFirst === rawFirst) return t.name;
-  }
-  return raw; // unknown topic → its own bucket, still capped independently
-}
 
 /** Keep at most `maxPerTopic` cards per canonical topic, preserving order. */
 function balanceByTopic(
