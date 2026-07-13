@@ -414,7 +414,7 @@ function isRelevantSource(url: string): boolean {
 }
 
 /** Fetch fresh articles from OpenAI and save to DB cache.
- *  - Same week as last fetch → appends new cards on top (dedup by URL, cap 50)
+ *  - Same week as last fetch → appends new cards on top (content dedup, cap 50)
  *  - New week → resets the cache with only the fresh cards
  */
 export async function refreshBrainDump(): Promise<void> {
@@ -434,10 +434,13 @@ export async function refreshBrainDump(): Promise<void> {
   // Fetch and filter new cards
   const newCards = (await fetchBrainDumpCards()).filter((c) => isRelevantSource(c.url));
 
-  // Merge: new on top, dedup by URL against existing, cap at CARD_CAP
-  const seenUrls = new Set(newCards.map((c) => c.url));
-  const dedupedExisting = existingCards.filter((c) => !seenUrls.has(c.url));
-  const merged = [...newCards, ...dedupedExisting].slice(0, CARD_CAP);
+  // Merge: new on top, then collapse near-duplicate stories by CONTENT (not URL).
+  // GPT's web search surfaces the same story from different aggregator URLs, so
+  // URL dedup misses them; meanwhile a single roundup URL (e.g. a daily headlines
+  // page) legitimately backs several distinct cards, so URL dedup would wrongly
+  // merge those. Content similarity handles both. First occurrence wins → the
+  // freshest phrasing of a repeated story is kept.
+  const merged = dedupeByContent([...newCards, ...existingCards]).slice(0, CARD_CAP);
 
   await prisma.brainDumpCache.upsert({
     where: { id: "singleton" },
@@ -445,6 +448,113 @@ export async function refreshBrainDump(): Promise<void> {
     update: { cards: JSON.stringify(merged), fetchedAt: new Date() },
   });
   revalidatePath("/brain-dump");
+}
+
+// ─── Content-level dedup ─────────────────────────────────────────────────────
+// GPT-4o returns the same story from different aggregator URLs (different titles
+// and URLs, same underlying event), which URL-based dedup can't catch. We compare
+// cards by content similarity instead.
+//
+// The signal is an IDF-weighted Jaccard over each card's (title + keyFacts) tokens:
+// tokens shared by many cards in the batch (ai, venture, billion…) are down-weighted,
+// so what drives a match is shared RARE tokens — the specific entities/products/
+// figures that identify a story ("hynix", "gpt", "muse", "zipline", "26.5"). That's
+// what separates a true dupe from two distinct stories that merely share generic
+// vocabulary.
+//
+// Thresholds were tuned against a real 30-card cache: every true duplicate scored a
+// weighted-Jaccard ≥ 0.23, the closest distinct pair scored 0.12, and distinct
+// stories sharing a roundup URL didn't clear 0.12 at all. WJ_THRESHOLD sits in that
+// gap. TITLE_THRESHOLD is a safety net for near-identical titles whose facts happen
+// to diverge (distinct same-URL stories have unrelated titles, so it never fires on
+// them).
+
+const WJ_THRESHOLD = 0.18;
+const TITLE_THRESHOLD = 0.75;
+
+// Common + domain-generic words carry no story identity; drop them before scoring.
+// (IDF already down-weights frequent tokens; this just trims obvious noise up front.)
+const DEDUP_STOPWORDS = new Set([
+  "the", "and", "for", "with", "from", "that", "this", "are", "its", "has", "have",
+  "was", "were", "will", "amid", "into", "over", "out", "new", "aims", "aim", "could",
+  "more", "than", "then", "they", "their", "been", "but", "not", "can", "all", "how",
+  "why", "what", "who", "about", "after", "before",
+  "billion", "million", "percent", "year", "week", "first", "second", "half",
+  "recent", "report", "reports",
+]);
+
+function tokenizeForDedup(text: string): string[] {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((t) => t.length >= 3 && !DEDUP_STOPWORDS.has(t));
+}
+
+function contentSignature(card: BrainDumpCard): Set<string> {
+  return new Set(tokenizeForDedup([card.title, ...(card.keyFacts ?? [])].join(" ")));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  a.forEach((t) => {
+    if (b.has(t)) inter++;
+  });
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+function weightedJaccard(a: Set<string>, b: Set<string>, idf: (t: string) => number): number {
+  let inter = 0;
+  let union = 0;
+  a.forEach((t) => {
+    const w = idf(t);
+    union += w;
+    if (b.has(t)) inter += w;
+  });
+  b.forEach((t) => {
+    if (!a.has(t)) union += idf(t); // tokens only in b (a's were counted above)
+  });
+  return union === 0 ? 0 : inter / union;
+}
+
+/** Drop near-duplicate stories by content similarity, keeping the first occurrence. */
+function dedupeByContent(cards: BrainDumpCard[]): BrainDumpCard[] {
+  if (cards.length < 2) return cards;
+
+  const sigs = cards.map(contentSignature);
+
+  // Document frequency across the batch → IDF (rare tokens weigh more).
+  const df = new Map<string, number>();
+  sigs.forEach((sig) => sig.forEach((t) => df.set(t, (df.get(t) ?? 0) + 1)));
+  const n = cards.length;
+  const idf = (t: string) => Math.log((n + 1) / ((df.get(t) ?? 0) + 1)) + 1;
+
+  const kept: BrainDumpCard[] = [];
+  const keptSigs: Set<string>[] = [];
+  const keptTitles: Set<string>[] = [];
+
+  for (let i = 0; i < cards.length; i++) {
+    const sig = sigs[i];
+    const titleTokens = new Set(tokenizeForDedup(cards[i].title));
+    let isDupe = false;
+    for (let k = 0; k < kept.length; k++) {
+      if (
+        weightedJaccard(sig, keptSigs[k], idf) >= WJ_THRESHOLD ||
+        jaccard(titleTokens, keptTitles[k]) >= TITLE_THRESHOLD
+      ) {
+        isDupe = true;
+        break;
+      }
+    }
+    if (!isDupe) {
+      kept.push(cards[i]);
+      keptSigs.push(sig);
+      keptTitles.push(titleTokens);
+    }
+  }
+  return kept;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
