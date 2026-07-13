@@ -3,19 +3,29 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { ArticleCard } from "./article-card";
-import { cardFilterLabels, AI_LABEL } from "@/lib/topics";
-import type { BrainDumpCard, OpenIssue } from "@/types/index";
+import { canonicalTopic, isAITopic, AI_LABEL } from "@/lib/topics";
+import type { BrainDumpCard, BrainDumpTopic, OpenIssue } from "@/types/index";
 
 interface FeedFiltersProps {
   cards: BrainDumpCard[];
   openIssues: OpenIssue[];
+  topics: BrainDumpTopic[];
 }
 
-export function FeedFilters({ cards, openIssues }: FeedFiltersProps) {
-  // Unchecked labels = topics the user has hidden. Empty = show everything.
+export function FeedFilters({ cards, openIssues, topics }: FeedFiltersProps) {
+  // Unchecked primary-topic buckets = topics the user has hidden. Empty = show all.
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Each card belongs to exactly ONE bucket: its canonical primary topic.
+  // Counting by primary topic means the dropdown counts sum to the cards shown.
+  function bucketOf(card: BrainDumpCard): string {
+    return canonicalTopic(card.topic, topics);
+  }
+  function displayLabel(bucket: string): string {
+    return isAITopic(bucket) ? AI_LABEL : bucket;
+  }
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -34,33 +44,36 @@ export function FeedFilters({ cards, openIssues }: FeedFiltersProps) {
     };
   }, [open]);
 
-  // Build the label list with per-label card counts; pin "AI" to the top.
-  const labels = useMemo(() => {
+  // Build the bucket list with per-bucket card counts; pin the AI bucket to the top.
+  const buckets = useMemo(() => {
     const counts = new Map<string, number>();
     for (const card of cards) {
-      for (const label of cardFilterLabels(card)) {
-        counts.set(label, (counts.get(label) ?? 0) + 1);
-      }
+      const b = bucketOf(card);
+      counts.set(b, (counts.get(b) ?? 0) + 1);
     }
     const entries = Array.from(counts.entries());
     entries.sort((a, b) => {
-      if (a[0] === AI_LABEL) return -1;
-      if (b[0] === AI_LABEL) return 1;
-      return a[0].localeCompare(b[0]);
+      const aAI = isAITopic(a[0]);
+      const bAI = isAITopic(b[0]);
+      if (aAI && !bAI) return -1;
+      if (bAI && !aAI) return 1;
+      return displayLabel(a[0]).localeCompare(displayLabel(b[0]));
     });
-    return entries; // [label, count][]
-  }, [cards]);
+    return entries; // [bucket, count][]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, topics]);
 
   const filtered = useMemo(() => {
     if (hidden.size === 0) return cards;
-    return cards.filter((card) => cardFilterLabels(card).every((l) => !hidden.has(l)));
-  }, [cards, hidden]);
+    return cards.filter((card) => !hidden.has(bucketOf(card)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, hidden, topics]);
 
-  function toggle(label: string) {
+  function toggle(bucket: string) {
     setHidden((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (next.has(bucket)) next.delete(bucket);
+      else next.add(bucket);
       return next;
     });
   }
@@ -101,20 +114,21 @@ export function FeedFilters({ cards, openIssues }: FeedFiltersProps) {
                 </span>
               </div>
               <div className="max-h-80 overflow-y-auto py-1">
-                {labels.map(([label, count]) => {
-                  const isChecked = !hidden.has(label);
+                {buckets.map(([bucket, count]) => {
+                  const isChecked = !hidden.has(bucket);
+                  const label = displayLabel(bucket);
                   return (
                     <label
-                      key={label}
+                      key={bucket}
                       className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-muted/60"
                     >
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => toggle(label)}
+                        onChange={() => toggle(bucket)}
                         className="h-4 w-4 rounded border-input accent-primary"
                       />
-                      <span className={["flex-1", label === AI_LABEL ? "font-semibold" : ""].join(" ")}>
+                      <span className={["flex-1", isAITopic(bucket) ? "font-semibold" : ""].join(" ")}>
                         {label}
                       </span>
                       <span className="text-xs text-muted-foreground">{count}</span>

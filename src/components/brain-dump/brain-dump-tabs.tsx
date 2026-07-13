@@ -59,7 +59,7 @@ export function BrainDumpTabs({ cards, backlogItems, openIssues, fetchedAt, conf
             <p className="text-muted-foreground text-xs">Click <strong>Refresh</strong> to fetch this week&apos;s top stories.</p>
           </div>
         ) : (
-          <FeedFilters cards={cards} openIssues={openIssues} />
+          <FeedFilters cards={cards} openIssues={openIssues} topics={config.topics} />
         )
       ) : tab === "manual" ? (
         <BacklogTab items={backlogItems} openIssues={openIssues} />
