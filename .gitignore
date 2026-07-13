@@ -10,3 +10,6 @@ prisma/dev.db
 prisma/dev.db-journal
 public/uploads/*
 !public/uploads/.gitkeep
+
+# Local Claude Code tooling (preview launch config, etc.) — not for the repo
+.claude/
