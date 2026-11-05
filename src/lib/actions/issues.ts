@@ -50,14 +50,23 @@ export async function ensureUpcomingIssues() {
       where: { publishDate: { gte: start, lte: end } },
     });
     if (!existing) {
-      await prisma.issue.create({
-        data: {
-          title: `Snapshot - ${formatDate(friday)}`,
-          publishDate: friday,
-          imageDate: friday,
-          currentStep: "links",
-        },
-      });
+      // Deterministic id per date: two concurrent page loads used to both pass the
+      // findFirst check and create duplicates (Dec 11/18, 2026, created 2ms apart).
+      // With a fixed id the second create hits the primary key and is ignored.
+      const autoId = `auto-${friday.getFullYear()}-${String(friday.getMonth() + 1).padStart(2, "0")}-${String(friday.getDate()).padStart(2, "0")}`;
+      try {
+        await prisma.issue.create({
+          data: {
+            id: autoId,
+            title: `Snapshot - ${formatDate(friday)}`,
+            publishDate: friday,
+            imageDate: friday,
+            currentStep: "links",
+          },
+        });
+      } catch (e) {
+        if ((e as { code?: string })?.code !== "P2002") throw e; // P2002 = unique violation → already created
+      }
     }
   }
 
