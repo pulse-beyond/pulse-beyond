@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { addLink, deleteAudioTranscript, removeLink, retryTranscription, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
+import { addLink, deleteAudioTranscript, removeLink, retryTranscription, updateLinkTitle, updateLinkToneNote, uploadAudio } from "@/lib/actions/links";
 import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LinkItem } from "@prisma/client";
-import { groupLinksBySubject } from "@/lib/link-utils";
+import { groupLinksBySubject, usableTitle } from "@/lib/link-utils";
 
 interface Props {
   issueId: string;
@@ -172,6 +172,7 @@ export function StepLinks({ issueId, links }: Props) {
       {/* Navigation */}
       <div className="flex flex-col items-end gap-2 pt-4">
         <Button
+          variant={subjectCount >= 3 ? "default" : "outline"}
           onClick={() => setIssueStep(issueId, "select")}
           disabled={subjectCount < 3}
         >
@@ -513,13 +514,54 @@ function LinkRow({
   link: LinkItem;
   onRemove: () => void;
 }) {
+  const title = usableTitle(link.metaTitle);
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title ?? "");
+
+  async function saveTitle() {
+    await updateLinkTitle(link.id, draftTitle);
+    setEditing(false);
+  }
+
   return (
     <div className="flex items-start gap-2 p-2 rounded bg-muted/40">
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">
-          {link.metaTitle || link.url}
-        </p>
-        {link.metaDescription && (
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <Input
+              autoFocus
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              placeholder="Article headline"
+              className="h-8 text-sm"
+            />
+            <Button size="sm" className="h-8" onClick={saveTitle}>
+              Save
+            </Button>
+          </div>
+        ) : title ? (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Click to edit the title"
+            className="font-medium text-sm truncate block max-w-full text-left hover:underline decoration-dotted"
+          >
+            {title}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-sm text-amber-700 hover:underline text-left"
+          >
+            This site blocked automatic title fetching. Add the headline +
+          </button>
+        )}
+        {title && link.metaDescription && (
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
             {link.metaDescription}
           </p>

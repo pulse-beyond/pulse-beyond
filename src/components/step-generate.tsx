@@ -196,11 +196,16 @@ export function StepGenerate({ issueId, sections, links }: Props) {
           Back
         </Button>
         <Button
+          variant={sections.length > 0 ? "default" : "outline"}
           onClick={() => setIssueStep(issueId, "events")}
           disabled={sections.length === 0}
+          title={sections.length === 0 ? "Generate the draft first" : undefined}
         >
-          Next
+          Next: Events
         </Button>
+        {sections.length === 0 && (
+          <p className="self-center text-xs text-muted-foreground">Generate the draft first to continue.</p>
+        )}
       </div>
     </div>
   );

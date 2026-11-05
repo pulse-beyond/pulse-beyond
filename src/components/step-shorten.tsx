@@ -6,7 +6,7 @@ import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LinkItem, EventItem } from "@prisma/client";
-import { groupLinksBySubject } from "@/lib/link-utils";
+import { groupLinksBySubject, usableTitle } from "@/lib/link-utils";
 
 interface Props {
   issueId: string;
@@ -67,7 +67,7 @@ export function StepShorten({ issueId, links, events }: Props) {
               <Card key={link.id}>
                 <CardContent className="p-3">
                   <p className="text-sm font-medium truncate">
-                    {link.metaTitle || link.url}
+                    {usableTitle(link.metaTitle) || link.url}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-muted-foreground truncate flex-1">
@@ -120,7 +120,7 @@ export function StepShorten({ issueId, links, events }: Props) {
         >
           Back
         </Button>
-        <Button onClick={() => setIssueStep(issueId, "export")}>
+        <Button variant={allShortened ? "default" : "outline"} onClick={() => setIssueStep(issueId, "export")}>
           Next: Export
         </Button>
       </div>

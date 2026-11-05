@@ -75,7 +75,7 @@ export function StepExport({ issueId, latestExport }: Props) {
         >
           Back
         </Button>
-        <Button onClick={() => setIssueStep(issueId, "image")}>
+        <Button variant={content ? "default" : "outline"} onClick={() => setIssueStep(issueId, "image")}>
           Next: Cover Image
         </Button>
       </div>

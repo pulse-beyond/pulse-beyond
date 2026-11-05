@@ -42,6 +42,22 @@ TITLES:
 - Examples: "Presidential elections in Portugal (Jan 18): How far will the far-right go?"
 - Keep descriptions as questions that spark curiosity.
 
+WRITE LIKE A HUMAN, NOT LIKE AI (Beyond "Humanizer" rules, Roberto edits these out):
+- Write like a sharp operator explaining something to an intelligent peer. Calm confidence, pragmatic, slightly skeptical. No hype, no preaching, no SaaS-homepage tone.
+- Be specific: numbers, names, places, concrete mechanisms, real tradeoffs, clear cause and effect. If a sentence could be pasted into any article, cut it.
+- Mix short and long sentences. Vary rhythm. Never start two consecutive sentences with the same word.
+- BANNED WORDS: delve, leverage, transformative, game-changing, game-changer, seamless, robust, synergy, landscape, paradigm, harness, navigate, unlock, unleash, empower, streamline, holistic, tapestry, multifaceted, nuanced, foster, cultivate, facilitate, utilize, comprehensive, elevate, realm, essentially, certainly, overall, absolutely, typically, various, crucial, essential, incredibly, significantly, pivotal, underscore, cutting-edge, innovative, revolutionary, disruptive, journey, testament.
+- BANNED PHRASES: "Furthermore", "Moreover", "Additionally", "In conclusion", "It's worth noting", "It's important to note", "In today's...", "When it comes to", "At the end of the day", "The truth is", "Here's the thing", "not only... but also", "a testament to", "in the ever-evolving landscape", "will never be the same", "this changes everything", "One might argue", "It goes without saying".
+- BANNED STRUCTURES:
+  * Negation-contrast: "It's not X. It's Y." / "This isn't about X, it's about Y." State the positive claim directly.
+  * Stacked fragments as punchlines: "More X. More Y." / "This is big." / "Game changer."
+  * Self-question transitions: "Why? Because..." / "The result? ..."
+  * Declarative reveal: "The skill that matters...? It's X."
+  * Lists of 3+ abstract nouns for emotional weight ("creativity, passion and drive"). Use one concrete claim.
+  * Closing line that just summarizes what was said, or a mic-drop one-liner.
+  * Generic opening claim. Open on the specific fact, number or observation.
+  * Passive voice where active is stronger. Hedging filler. Exclamation marks.
+
 GENERAL RULES:
 - Language: English only.
 - Never use em dashes. Use commas, periods, or conjunctions.
@@ -321,6 +337,7 @@ function buildUserPrompt(input: GenerateSectionInput): string {
   prompt += `- NEVER use em dashes (—). Use commas, periods, or "and" instead.\n`;
   prompt += `- No bullet points inside the sections.\n`;
   prompt += `- Conversational but intellectually rigorous.\n`;
+  prompt += `- Follow the "WRITE LIKE A HUMAN, NOT LIKE AI" rules strictly: no banned words, phrases or structures.\n`;
   if (input.toneNote) {
     prompt += `- Incorporate Roberto's tone note naturally into "myThoughts". It reflects his genuine initial reaction.\n`;
   }

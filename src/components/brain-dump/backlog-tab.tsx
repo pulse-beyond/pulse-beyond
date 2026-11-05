@@ -1,5 +1,7 @@
 "use client";
 
+import { usableTitle } from "@/lib/link-utils";
+
 import { useState, useRef, useEffect } from "react";
 import { ExternalLink, Plus, ChevronDown, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -125,7 +127,7 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
         )}
 
         <h3 className="text-sm font-semibold text-foreground leading-snug">
-          {item.metaTitle ?? item.url}
+          {usableTitle(item.metaTitle) ?? item.url}
         </h3>
 
         {item.metaDescription && (

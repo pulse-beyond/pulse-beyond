@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getAIProvider } from "@/lib/ai";
 import { searchArchive } from "@/lib/archive";
+import { usableTitle } from "@/lib/link-utils";
 import type { MainSectionContent } from "@/types";
 import { revalidatePath } from "next/cache";
 
@@ -51,21 +52,21 @@ export async function generateDraft(issueId: string) {
     try {
       // Search archive for relevant past content (using primary link)
       const archiveContext = searchArchive({
-        metaTitle: primaryLink.metaTitle ?? undefined,
+        metaTitle: usableTitle(primaryLink.metaTitle) ?? undefined,
         metaDescription: primaryLink.metaDescription ?? undefined,
         url: primaryLink.url,
       });
 
       const draft = await ai.generateSection({
         url: primaryLink.url,
-        metaTitle: primaryLink.metaTitle,
+        metaTitle: usableTitle(primaryLink.metaTitle),
         metaDescription: primaryLink.metaDescription,
         toneNote: primaryLink.toneNote,
         audioTranscript: primaryLink.audioTranscript,
         archiveContext: archiveContext || null,
         additionalSources: additionalLinks.map((l) => ({
           url: l.url,
-          metaTitle: l.metaTitle,
+          metaTitle: usableTitle(l.metaTitle),
           metaDescription: l.metaDescription,
         })),
       });
@@ -89,7 +90,7 @@ export async function generateDraft(issueId: string) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       console.error(`Failed to generate section for subject ${i + 1}:`, msg);
-      errors.push(`Section ${i + 1} (${primaryLink.metaTitle || primaryLink.url}): ${msg}`);
+      errors.push(`Section ${i + 1} (${usableTitle(primaryLink.metaTitle) || primaryLink.url}): ${msg}`);
     }
   }
 

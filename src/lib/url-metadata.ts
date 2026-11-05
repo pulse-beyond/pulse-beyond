@@ -1,3 +1,5 @@
+import { isBlockedTitle } from "@/lib/link-utils";
+
 /** Decode HTML entities like &quot; &amp; &#39; etc. */
 function decodeHtmlEntities(str: string): string {
   return str
@@ -12,45 +14,52 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
+const USER_AGENT = "Mozilla/5.0 (compatible; SnapshotBuilder/1.0)";
+
+function metaContent(html: string, attr: "property" | "name", key: string): string | null {
+  // content can come before or after the property/name attribute
+  const a = new RegExp(`<meta[^>]+${attr}=["']${key}["'][^>]*content=["']([^"']+)["']`, "i");
+  const b = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*${attr}=["']${key}["']`, "i");
+  return html.match(a)?.[1] ?? html.match(b)?.[1] ?? null;
+}
+
+async function fetchHtml(url: string): Promise<string | null> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+    signal: AbortSignal.timeout(8000),
+  });
+  return res.ok ? await res.text() : null;
+}
+
 /**
  * Fetches basic metadata (title, description) from a URL.
- * Falls back gracefully if the page blocks scraping.
+ * Falls back gracefully (null title → the UI shows the URL) if the page blocks scraping.
  */
 export async function fetchUrlMetadata(
   url: string
 ): Promise<{ title: string | null; description: string | null }> {
   try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; SnapshotBuilder/1.0; +https://example.com)",
-      },
-      signal: AbortSignal.timeout(8000),
-    });
+    const html = await fetchHtml(url);
+    if (!html) return { title: null, description: null };
 
-    if (!response.ok) {
-      return { title: null, description: null };
-    }
+    // og:title / citation_title are the clean headline (no " | Site name" suffix).
+    const candidates = [
+      metaContent(html, "property", "og:title"),
+      metaContent(html, "name", "citation_title"),
+      metaContent(html, "name", "twitter:title"),
+      html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? null,
+    ]
+      .filter((t): t is string => !!t)
+      .map((t) => decodeHtmlEntities(t.trim()));
+    const title = candidates.find((t) => !isBlockedTitle(t)) ?? null;
 
-    const html = await response.text();
-
-    // Extract <title>
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : null;
-
-    // Extract meta description
-    const descMatch = html.match(
-      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i
-    );
-    // Also try og:description
-    const ogDescMatch = html.match(
-      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i
-    );
-    const description = descMatch?.[1] || ogDescMatch?.[1] || null;
+    const description =
+      metaContent(html, "name", "description") ?? metaContent(html, "property", "og:description");
 
     return {
-      title: title ? decodeHtmlEntities(title) : null,
-      description: description ? decodeHtmlEntities(description) : null,
+      title,
+      // A challenge page's description is junk too.
+      description: title && description ? decodeHtmlEntities(description) : null,
     };
   } catch {
     // Network error, timeout, or blocked. Fall back silently.

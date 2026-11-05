@@ -248,6 +248,7 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
             Back
           </Button>
           <Button
+            variant={events.some((e) => e.included) ? "default" : "outline"}
             onClick={() => setIssueStep(issueId, "shorten")}
             disabled={events.filter((e) => e.included).length === 0}
           >

@@ -33,6 +33,15 @@ export async function addLink(
   revalidatePath(`/issues/${issueId}`);
 }
 
+/** Manually set a link's title (when the site blocks automatic title fetching). */
+export async function updateLinkTitle(linkId: string, title: string) {
+  const link = await prisma.linkItem.update({
+    where: { id: linkId },
+    data: { metaTitle: title.trim() || null },
+  });
+  revalidatePath(`/issues/${link.issueId}`);
+}
+
 /** Update a link's tone note */
 export async function updateLinkToneNote(linkId: string, toneNote: string) {
   const link = await prisma.linkItem.update({

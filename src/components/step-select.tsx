@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { selectFinalLinks } from "@/lib/actions/links";
 import { setIssueStep } from "@/lib/actions/issues";
+import { usableTitle } from "@/lib/link-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -166,7 +167,7 @@ export function StepSelect({ issueId, links }: Props) {
                     <div className="mt-2 space-y-1">
                       {groupLinks.map((link) => (
                         <p key={link.id} className="text-xs truncate text-muted-foreground">
-                          • {link.metaTitle || link.url}
+                          • {usableTitle(link.metaTitle) || link.url}
                         </p>
                       ))}
                     </div>
