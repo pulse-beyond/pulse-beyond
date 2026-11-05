@@ -4,15 +4,68 @@ import { prisma } from "@/lib/db";
 import type { MainSectionContent } from "@/types";
 import { revalidatePath } from "next/cache";
 
+// Real posts as Roberto published them. Line breaks matter: the old examples were
+// pasted flattened onto one line, and the model faithfully copied that (Oct 2026
+// posts came out as one run-on block). Example 1 is his Nov 1, 2026 post verbatim
+// (typo "approaching and AI" fixed). Examples 2-3 are earlier posts re-broken into
+// his current layout, with the closing thesis he no longer uses removed.
 const FEW_SHOT_EXAMPLES = `
 EXAMPLE 1:
-🗞 Weekly Snapshot is live👉 Markets. Design assumptions. Geopolitics.🌎  Three places where the rules are quietly changing.This week:👉 Can biodiversity preservation become a profitable business model?👉 Rivian's founder challenges the humanoid robot assumption👉 Afghanistan reminds the world that even great powers have limits💡 Conservation needs economic engineering.💡 AI may require rethinking the physical and organizational structures we build.💡 Some places continue to resist both hard and soft power.In a world being reshaped by technology, natural limits and geopolitics, old models are cracking.👇🏼👇🏼  Dive into this week's Snapshot.
+🗞 Weekly Snapshot — Nov 01, 2026
+
+👉 AI investment. Science investment. Global business.
+
+🌎 Three domains where you need to understand the game.
+
+This week:
+
+👉 Are we approaching an AI investment reckoning?
+👉 The pressure for science to deliver prosperity is growing.
+👉 Mbappé's comment about Mao cost hundreds of millions.
+
+💡 AI stocks are making markets nervous.
+💡 Meta-science units are becoming fashionable for a good reason.
+💡 Global operations require cultural intelligence and respect.
+
+👇🏼👇🏼 Dive into this week's Snapshot.
 
 EXAMPLE 2:
-🗞 Weekly Snapshot — Mar 08, 2026👉 Supply chains. Warfare. Data. 🌎  Three arenas where power is being quietly redefined.This week:👉 Cars become computers on wheels — and automakers move upstream into semiconductors 👉 Warfare enters the age of industrial asymmetry, where cheap drones meet expensive defenses 👉 A dispute over Congo's geological archives reveals the real gold mine: data💡 Technology is reshaping industries.💡 Cost structures are reshaping war.💡 Data is reshaping geopolitics.In the 21st century, whoever controls chips, production capacity and data will shape the rules of the game.👇🏼👇🏼  Dive into this week's Snapshot.
+🗞 Weekly Snapshot — Mar 08, 2026
+
+👉 Supply chains. Warfare. Data.
+
+🌎 Three arenas where power is being quietly redefined.
+
+This week:
+
+👉 Cars become computers on wheels and automakers move into chips.
+👉 Cheap drones meet expensive defenses.
+👉 Congo's geological archives are the real gold mine.
+
+💡 Technology is reshaping industries.
+💡 Cost structures are reshaping war.
+💡 Data is reshaping geopolitics.
+
+👇🏼👇🏼 Dive into this week's Snapshot.
 
 EXAMPLE 3:
-🗞 Weekly Snapshot — Mar 01, 2026👉 Culture. Demographics. AI+Robotics.🌎 Three forces quietly reshaping power.This week:👉 K-pop in Colombia and the real economics of soft power👉 South Korea's birthrate ticks up — but the demographic storm remains👉 Google pulls robotics back in-house as software meets hardware at scale💡 Narratives create markets.💡 People create power.💡 AI is moving into the physical world.Competitiveness is no longer just about factories or code. It is culture, population dynamics and embodied intelligence.And the pace is accelerating.👇🏼👇🏼 Dive into this week's Snapshot.
+🗞 Weekly Snapshot — Mar 01, 2026
+
+👉 Culture. Demographics. AI+Robotics.
+
+🌎 Three forces quietly reshaping power.
+
+This week:
+
+👉 K-pop in Colombia and the real economics of soft power.
+👉 South Korea's birthrate ticks up, but the storm remains.
+👉 Google pulls robotics back in-house.
+
+💡 Narratives create markets.
+💡 People create power.
+💡 AI is moving into the physical world.
+
+👇🏼👇🏼 Dive into this week's Snapshot.
 `;
 
 function resolveTitle(content: MainSectionContent): string {
@@ -77,12 +130,21 @@ Sections:
 ${sectionsText}
 
 Rules:
-- Follow the EXACT same structure as the examples: header, topic keywords line, tagline line, "This week:" hooks, insights, closing thesis, CTA.
+- Follow the EXACT same structure and line breaks as the examples, in this order:
+  1. "🗞 Weekly Snapshot — <edition date>"
+  2. blank line, "👉 " + topic keywords line
+  3. blank line, "🌎 " + one-sentence tagline linking the three stories
+  4. blank line, "This week:"
+  5. blank line, three "👉 " hook lines, one per story, each on its own line
+  6. blank line, three "💡 " insight lines, each on its own line
+  7. blank line, "👇🏼👇🏼 Dive into this week's Snapshot."
+- Every item goes on its OWN line. Put an empty line between blocks exactly as shown. Never merge lines.
+- NO closing thesis paragraph. Go straight from the last 💡 line to the 👇🏼👇🏼 line.
+- Keep every 👉 hook and 💡 insight short: about 6 to 10 words, one sentence. No dashes.
 - The 👉 topic keywords line should use 2–4 broad theme words (e.g. "Markets. Design assumptions. Geopolitics."), not the full article titles.
-- Each "This week:" hook (👉) should be one punchy sentence that hooks curiosity about that story.
-- Each 💡 insight should be a short declarative sentence (pattern: "[Subject] is reshaping/needs/requires [something]").
-- The closing thesis is 1–3 sentences that synthesize the big picture across all 3 stories.
-- End with exactly: 👇🏼👇🏼  Dive into this week's Snapshot.
+- Each "This week:" hook (👉) hooks curiosity about that story (a question works well).
+- Each 💡 insight is a short declarative takeaway.
+- End with exactly: 👇🏼👇🏼 Dive into this week's Snapshot.
 - Match the energy and editorial intelligence of the examples. Do NOT be generic.
 - Reply with ONLY the LinkedIn post text. No explanation, no preamble.`;
 

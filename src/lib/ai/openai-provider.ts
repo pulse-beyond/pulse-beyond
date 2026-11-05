@@ -21,8 +21,8 @@ TITLES:
 - Explains WHY something is significant, not just WHAT happened.
 - Connects dots across industries, regions, and time horizons.
 - Tone: authoritative but not academic. Clear, direct, no jargon.
-- Typical length: 150-250 words.
-- No bullet points. Flowing paragraphs.
+- Length: ONE single paragraph, 100-150 words. Never split it into several paragraphs.
+- No bullet points.
 - No em dashes. Use commas, periods, or "and" instead.
 
 "MY THOUGHTS ON IT" section:
@@ -34,7 +34,7 @@ TITLES:
 - Almost always ends with 1-2 provocative questions directed at the reader.
 - Slightly opinionated but grounded. Never arrogant.
 - Tone: curious, insightful, warm, intellectually honest.
-- Typical length: 150-300 words.
+- Length: ONE single paragraph, 100-150 words. Never split it into several paragraphs.
 - No bullet points. No em dashes.
 
 "TO KEEP AN EYE ON" events:
@@ -105,8 +105,8 @@ export class OpenAIProvider implements AIProvider {
 
     return {
       titleOptions: parsed.titleOptions || [],
-      whyItMatters: parsed.whyItMatters || "",
-      myThoughts: parsed.myThoughts || "",
+      whyItMatters: (parsed.whyItMatters || "").replace(/\s*\n+\s*/g, " ").trim(),
+      myThoughts: (parsed.myThoughts || "").replace(/\s*\n+\s*/g, " ").trim(),
     };
   }
 
@@ -315,8 +315,8 @@ function buildUserPrompt(input: GenerateSectionInput): string {
 
   prompt += `\nReturn a JSON object with exactly these keys:\n`;
   prompt += `- "titleOptions": array of 5 short, punchy title options (following the style examples above)\n`;
-  prompt += `- "whyItMatters": the "Why it matters" section (150-250 words, analytical, macro perspective, flowing paragraphs)\n`;
-  prompt += `- "myThoughts": the "My thoughts on it" section (150-300 words, personal, first person as Roberto, ends with provocative questions to the reader)\n`;
+  prompt += `- "whyItMatters": the "Why it matters" section (ONE single paragraph, 100-150 words, analytical, macro perspective, no line breaks)\n`;
+  prompt += `- "myThoughts": the "My thoughts on it" section (ONE single paragraph, 100-150 words, personal, first person as Roberto, closes on the central question at stake, no line breaks)\n`;
   prompt += `\nCRITICAL RULES:\n`;
   prompt += `- NEVER use em dashes (—). Use commas, periods, or "and" instead.\n`;
   prompt += `- No bullet points inside the sections.\n`;

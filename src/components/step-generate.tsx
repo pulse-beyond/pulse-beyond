@@ -139,7 +139,11 @@ export function StepGenerate({ issueId, sections, links }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button onClick={handleGenerate} disabled={generating}>
+        <Button
+          variant={sections.length > 0 ? "outline" : "default"}
+          onClick={handleGenerate}
+          disabled={generating}
+        >
           {generating ? (
             <span className="inline-flex items-center gap-2">
               <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

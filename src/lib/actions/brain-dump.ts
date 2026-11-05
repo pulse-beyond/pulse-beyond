@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { addLink } from "@/lib/actions/links";
 import { revalidatePath } from "next/cache";
 import type { BrainDumpCard, BrainDumpTopic, BrainDumpConfig, OpenIssue } from "@/types/index";
-import { canonicalTopic } from "@/lib/topics";
+import { cardBucket, isAICard, isAITopic } from "@/lib/topics";
 
 // ─── Default topics (used until Roberto customizes them in the Topics tab) ───
 // Order carries NO priority — the prompt treats every topic as equally important.
@@ -143,54 +143,77 @@ function formatDateLong(d: Date): string {
 }
 
 // ─── Fetch cards using GPT-4o web search ─────────────────────────────────────
+// Diversity strategy (Nov 2026 fix — Roberto saw almost only AI stories even with
+// the AI filter unchecked). Real cache showed 9/12 cards were about AI but labelled
+// "Digital Infrastructure", "Venture Capital"… Two causes, two fixes:
+//  1. Supply: a single search over 15 topics drifts to whatever dominates the news
+//     (AI). We now run one search per topic GROUP in parallel; non-AI groups are
+//     forbidden from returning AI-centric stories, so every area gets real slots.
+//  2. Labelling: GPT tagged stories by angle, not subject. Each card now carries
+//     `aiCentric` and the primary topic must be what the story is ABOUT; the client
+//     filter and the per-topic cap treat any AI-centric card as AI (see topics.ts).
 
-export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+const TOPICS_PER_GROUP = 4;
+const STORIES_PER_GROUP = 5;
+
+function groupTopics(topics: BrainDumpTopic[]): { topics: BrainDumpTopic[]; isAI: boolean }[] {
+  const ai = topics.filter((t) => isAITopic(t.name));
+  const rest = topics.filter((t) => !isAITopic(t.name));
+  const groups: { topics: BrainDumpTopic[]; isAI: boolean }[] = [];
+  if (ai.length) groups.push({ topics: ai, isAI: true });
+  for (let i = 0; i < rest.length; i += TOPICS_PER_GROUP) {
+    groups.push({ topics: rest.slice(i, i + TOPICS_PER_GROUP), isAI: false });
   }
+  return groups;
+}
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+function buildSearchPrompt(opts: {
+  today: string;
+  startStr: string;
+  endStr: string;
+  groupTopics: BrainDumpTopic[];
+  allTopics: BrainDumpTopic[];
+  isAIGroup: boolean;
+  count: number;
+}): string {
+  const { today, startStr, endStr, groupTopics, allTopics, isAIGroup, count } = opts;
+  const focusList = groupTopics
+    .map((t) => `- ${t.name}${t.description ? ` — ${t.description}` : ""}`)
+    .join("\n");
 
-  const { start, end } = getEditionWindow();
-  const startStr = formatDateLong(start);
-  const endStr = formatDateLong(end);
+  const aiRule = isAIGroup
+    ? ""
+    : `
+NO AI STORIES IN THIS SEARCH — THIS IS CRITICAL:
+Artificial intelligence is covered by a separate search. Do NOT return any story whose main subject is AI
+(AI models, AI companies, AI investment/stocks, AI data centers, AI chips, AI regulation, AI adoption, etc.).
+A story qualifies only if it would still be the same story with every mention of AI removed.
+Prefer fewer stories over AI stories.
+`;
 
-  const { topics, maxPerTopic } = await getBrainDumpConfig();
-  const editorialDNA = buildEditorialDNA(topics);
-  const minTopicAreas = Math.min(5, topics.length);
-
-  const prompt = `Today is ${today}.
+  return `Today is ${today}.
 
 You are a specialized research assistant for Weekly Snapshot, a weekly newsletter written by Roberto.
 
-Your task: Search the web to find 12 to 15 of the most relevant, insightful, and timely news stories. Apply the editorial DNA below to filter and frame each story.
+Your task: Search the web to find up to ${count} of the most relevant, insightful, and timely news stories
+in THESE FOCUS TOPICS (spread across them — don't pick them all from one):
+${focusList}
 
 STRICT DATE REQUIREMENT — THIS IS CRITICAL:
 Only include stories published between ${startStr} and ${endStr}.
-Do NOT include any story published before ${startStr}.
 If you cannot confirm a story was published within this exact date range, exclude it.
-Every story must be from this current week's edition window only.
-
-TOPIC BALANCE — THIS IS CRITICAL:
-Include AT MOST ${maxPerTopic} stories from any single topic area. No topic may dominate the edition.
-Spread the selection across the topics below; treat them as equally important, not ranked.
-
-${editorialDNA}
+${aiRule}
+${buildEditorialDNA(allTopics)}
 
 INSTRUCTIONS:
 - Search for real, recent stories published between ${startStr} and ${endStr} ONLY
-- Cover at least ${minTopicAreas} different topic areas from the list above
-- Never exceed ${maxPerTopic} stories from the same topic area
 - Prioritize Tier 1 sources when available
-- Include at least 2 stories from non-Western perspectives (China, India, Southeast Asia, Africa, Latin America, Middle East)
+- Favor non-Western perspectives where possible (China, India, Southeast Asia, Africa, Latin America, Middle East)
 - All output must be in English
 - For each story, generate a Roberto-style title (declarative, provocative, or forward-looking — never generic)
+- "topic" must be the topic the story is fundamentally ABOUT (its subject), not the angle it touches.
+  Use the exact name of one of the focus topics above.
+- "aiCentric" is true if the story's main subject is artificial intelligence, false otherwise.
 
 Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) with exactly this structure for each item:
 [
@@ -200,15 +223,18 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
     "source": "Publication Name",
     "url": "https://actual-article-url.com",
     "publishedAt": "X days ago",
-    "topic": "Primary topic (e.g. AI, Geopolitics, Energy, Biotech, Semiconductors, Space, Robotics, Climate, Finance)",
+    "topic": "Exact focus topic name",
+    "aiCentric": false,
     "whyItMatters": "2-3 sentences on the strategic or global significance — not just what happened, but what it signals.",
     "robertosAngle": "1-2 sentences on how Roberto would frame this — geopolitical lens, competitive dynamics, or civilizational implication.",
     "keyFacts": ["Specific fact 1", "Specific fact 2", "Specific fact 3"],
     "topicTags": ["Tag1", "Tag2", "Tag3"]
   }
 ]`;
+}
 
-  // Call OpenAI API with web_search_preview tool (no-store to bypass Next.js cache)
+/** One web-search call → parsed cards. */
+async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCard[]> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     cache: "no-store",
@@ -231,50 +257,37 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
 
   const data = await response.json();
 
-  // Extract the text output from the response
   let rawText = "";
   if (data.output && Array.isArray(data.output)) {
     for (const item of data.output) {
       if (item.type === "message" && item.content) {
         for (const block of item.content) {
-          if (block.type === "output_text") {
-            rawText += block.text;
-          }
+          if (block.type === "output_text") rawText += block.text;
         }
       }
     }
   }
+  if (!rawText) throw new Error("No text output from OpenAI API");
 
-  if (!rawText) {
-    throw new Error("No text output from OpenAI API");
-  }
-
-  // Parse JSON — strip any markdown fences if present
   const jsonMatch = rawText.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
-    throw new Error(`Could not find JSON array in response: ${rawText.slice(0, 500)}`);
+    // A group with nothing qualifying may legitimately answer "[]"-less prose.
+    console.warn("[brain-dump] no JSON array in response:", rawText.slice(0, 300));
+    return [];
   }
 
-  let jsonStr = jsonMatch[0];
+  // Sanitize common GPT-4o JSON issues (smart quotes, dashes).
+  const jsonStr = jsonMatch[0]
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-");
 
-  // Sanitize common GPT-4o JSON issues:
-  // 1. Replace curly/smart quotes with straight quotes
-  jsonStr = jsonStr
-    .replace(/[\u2018\u2019]/g, "'")   // ' '  → '
-    .replace(/[\u201C\u201D]/g, '"')   // " "  → "
-    .replace(/[\u2013\u2014]/g, "-");  // – —  → -
-
-  // 2. Try parsing; if it fails, extract as many valid cards as possible
-  let cards: BrainDumpCard[];
   try {
-    cards = JSON.parse(jsonStr);
+    return JSON.parse(jsonStr);
   } catch {
-    // Attempt to salvage individual objects from a truncated/broken array
-    const objectMatches = jsonStr.match(/\{[\s\S]*?\}(?=\s*[,\]])/g);
-    if (!objectMatches || objectMatches.length === 0) {
-      throw new Error(`JSON parse failed and no salvageable objects found. Raw: ${jsonStr.slice(0, 500)}`);
-    }
-    cards = [];
+    // Salvage individual objects from a truncated/broken array.
+    const objectMatches = jsonStr.match(/\{[\s\S]*?\}(?=\s*[,\]])/g) ?? [];
+    const cards: BrainDumpCard[] = [];
     for (const obj of objectMatches) {
       try {
         cards.push(JSON.parse(obj));
@@ -283,15 +296,94 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
       }
     }
     if (cards.length === 0) {
-      throw new Error("Could not parse any cards from GPT-4o response");
+      throw new Error(`JSON parse failed. Raw: ${jsonStr.slice(0, 300)}`);
     }
+    return cards;
+  }
+}
+
+export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
   }
 
-  // Ensure all cards have valid IDs
-  return cards.map((card, i) => ({
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const { start, end } = getEditionWindow();
+  const startStr = formatDateLong(start);
+  const endStr = formatDateLong(end);
+
+  const { topics, maxPerTopic } = await getBrainDumpConfig();
+  const groups = groupTopics(topics);
+
+  const results = await Promise.allSettled(
+    groups.map((g) =>
+      searchCards(
+        apiKey,
+        buildSearchPrompt({
+          today,
+          startStr,
+          endStr,
+          groupTopics: g.topics,
+          allTopics: topics,
+          isAIGroup: g.isAI,
+          count: g.isAI ? maxPerTopic : STORIES_PER_GROUP,
+        })
+      ).then((cards) =>
+        // Safety net: a non-AI group that still returns AI stories doesn't get to keep them.
+        g.isAI ? cards : cards.filter((c) => !isAICard(c))
+      )
+    )
+  );
+
+  const cards: BrainDumpCard[] = [];
+  const failures: string[] = [];
+  results.forEach((r, i) => {
+    const label = groups[i].topics.map((t) => t.name).join(", ");
+    if (r.status === "fulfilled") {
+      console.log("[brain-dump] group [%s] → %d cards", label, r.value.length);
+      cards.push(...r.value);
+    } else {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      console.error("[brain-dump] group [%s] failed: %s", label, msg);
+      failures.push(msg);
+    }
+  });
+
+  // Only fail loudly if every group failed — partial results are still useful.
+  if (cards.length === 0 && failures.length > 0) {
+    throw new Error(failures[0]);
+  }
+
+  // Interleave groups so the feed opens with a mix rather than one block per group.
+  const interleaved = interleaveByTopic(cards, topics);
+
+  return interleaved.map((card, i) => ({
     ...card,
     id: card.id || slugify(card.title) || `card-${i}`,
   }));
+}
+
+/** Round-robin across canonical topics so neighbouring cards differ. */
+function interleaveByTopic(cards: BrainDumpCard[], topics: BrainDumpTopic[]): BrainDumpCard[] {
+  const buckets = new Map<string, BrainDumpCard[]>();
+  for (const c of cards) {
+    const b = cardBucket(c, topics);
+    if (!buckets.has(b)) buckets.set(b, []);
+    buckets.get(b)!.push(c);
+  }
+  const lists = Array.from(buckets.values());
+  const out: BrainDumpCard[] = [];
+  for (let i = 0; out.length < cards.length; i++) {
+    for (const l of lists) if (l[i]) out.push(l[i]);
+  }
+  return out;
 }
 
 // ─── Add a card's URL to an edition as a link ───────────────────────────────
@@ -338,6 +430,7 @@ export async function getOpenIssues(): Promise<OpenIssue[]> {
           year: "numeric",
         })
       : null,
+    publishDateISO: issue.publishDate ? issue.publishDate.toISOString() : null,
   }));
 }
 
@@ -372,7 +465,8 @@ function balanceByTopic(
   const counts = new Map<string, number>();
   const kept: BrainDumpCard[] = [];
   for (const card of cards) {
-    const bucket = canonicalTopic(card.topic, topics);
+    // AI-centric cards share the AI bucket whatever their stated topic, so the cap holds.
+    const bucket = cardBucket(card, topics);
     const n = counts.get(bucket) ?? 0;
     if (n < maxPerTopic) {
       counts.set(bucket, n + 1);

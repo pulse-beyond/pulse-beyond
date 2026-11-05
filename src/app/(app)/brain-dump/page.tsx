@@ -5,6 +5,8 @@ import { getBalancedBrainDump, getOpenIssues, getBrainDumpConfig } from "@/lib/a
 import { getBacklogItems } from "@/lib/actions/backlog";
 
 export const dynamic = "force-dynamic";
+// Refresh runs several web searches in parallel; give it room on Vercel.
+export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: "Brain Dump | Snapshot Builder",

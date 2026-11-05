@@ -59,15 +59,20 @@ export async function buildExport(
         ? content.customTitle || content.titleOptions[0]
         : content.selectedTitle || content.titleOptions[0];
 
+    // Spacing mirrors what Roberto publishes: a blank line between every block.
     // 👉 Section title
     lines.push(`👉 ${title}`);
+    lines.push("");
 
     // ↳ Why it matters
     lines.push(`↳ Why it matters`);
+    lines.push("");
     lines.push(content.whyItMatters);
+    lines.push("");
 
     // ↳ My thoughts on it
     lines.push(`↳ My thoughts on it`);
+    lines.push("");
     lines.push(content.myThoughts);
     lines.push("");
 

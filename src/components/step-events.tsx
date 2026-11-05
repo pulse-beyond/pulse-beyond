@@ -134,7 +134,11 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
 
       {/* Auto-fetch button */}
       <div className="flex items-center gap-3">
-        <Button onClick={handleFetchEvents} disabled={fetching}>
+        <Button
+          variant={events.length > 0 ? "outline" : "default"}
+          onClick={handleFetchEvents}
+          disabled={fetching}
+        >
           {fetching ? (
             <span className="inline-flex items-center gap-2">
               <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

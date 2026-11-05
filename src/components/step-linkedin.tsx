@@ -10,6 +10,8 @@ import type { LinkedInPostDraft } from "@prisma/client";
 interface Props {
   issueId: string;
   latestDraft: LinkedInPostDraft | null;
+  /** Final primary action of the whole flow (Conclude edition). */
+  publishSlot?: React.ReactNode;
 }
 
 const LOADING_PHRASES = [
@@ -51,7 +53,7 @@ function useLoadingPhrase(active: boolean) {
   return phrase;
 }
 
-export function StepLinkedIn({ issueId, latestDraft }: Props) {
+export function StepLinkedIn({ issueId, latestDraft, publishSlot }: Props) {
   const [generating, setGenerating] = useState(false);
   const [postText, setPostText] = useState<string>(latestDraft?.content ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,11 @@ export function StepLinkedIn({ issueId, latestDraft }: Props) {
         </p>
       </div>
 
-      <Button onClick={handleGenerate} disabled={generating}>
+      <Button
+        variant={postText ? "outline" : "default"}
+        onClick={handleGenerate}
+        disabled={generating}
+      >
         {generating ? (
           <span className="inline-flex items-center gap-2">
             <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -118,21 +124,22 @@ export function StepLinkedIn({ issueId, latestDraft }: Props) {
         <Card>
           <CardContent className="p-4 space-y-4">
             <textarea
-              className="w-full min-h-[320px] text-sm font-mono border-0 bg-transparent resize-none focus:outline-none"
+              className="w-full min-h-[380px] text-[15px] leading-relaxed whitespace-pre-wrap border-0 bg-transparent resize-y focus:outline-none"
               value={postText}
               onChange={(e) => setPostText(e.target.value)}
             />
-            <Button onClick={handleCopy} variant={copied ? "outline" : "default"}>
+            <Button onClick={handleCopy} variant="secondary">
               {copied ? "Copied!" : "Copy to Clipboard"}
             </Button>
           </CardContent>
         </Card>
       )}
 
-      <div className="flex gap-3 pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-6">
         <Button variant="outline" onClick={() => setIssueStep(issueId, "image")}>
           Back
         </Button>
+        {publishSlot}
       </div>
     </div>
   );

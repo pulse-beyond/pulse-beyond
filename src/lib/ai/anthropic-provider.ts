@@ -21,8 +21,8 @@ TITLES:
 - Explains WHY something is significant, not just WHAT happened.
 - Connects dots across industries, regions, and time horizons.
 - Tone: authoritative but not academic. Clear, direct, no jargon.
-- Typical length: 150-250 words.
-- No bullet points. Flowing paragraphs.
+- Length: ONE single paragraph, 100-150 words. Never split it into several paragraphs.
+- No bullet points.
 - No em dashes. Use commas, periods, or "and" instead.
 
 "MY THOUGHTS ON IT" section:
@@ -31,11 +31,24 @@ TITLES:
 - Phrases like "I remember...", "I have seen...", "I have had the chance to...", "In one of my previous lives..." should only be used when the content is explicitly supported by provided context. If no personal context is available, express his analytical perspective as a VC investor (Roberto is part of Seldor Capital, a VC firm investing in space tech) without inventing experiences.
 - NEVER open with "I find myself", "I find myself thinking", "I can't help but", "I can't help but wonder", or any other generic introspective opener. Begin directly with a specific observation, a bold assertion, or a grounded contextual frame.
 - NEVER mention, reference, or cite Roberto's voice memo, audio recording, or transcript in the output. The transcript is invisible raw material — it informs the writing but must never appear as a source or be acknowledged in any way (no "as I mentioned in my voice note", "my recording", "the phrase I used", "as I said", etc.).
-- Almost always ends with 1-2 provocative questions directed at the reader.
+- Closes on the central question at stake. Often framed as a statement ("The fundamental question is whether..."), at most one direct question to the reader.
 - Slightly opinionated but grounded. Never arrogant.
 - Tone: curious, insightful, warm, intellectually honest.
-- Typical length: 150-300 words.
+- Length: ONE single paragraph, 100-150 words. Never split it into several paragraphs.
 - No bullet points. No em dashes.
+
+LENGTH AND DENSITY (learned from Roberto's own edits):
+Roberto consistently cuts drafts to ONE tight paragraph per section, roughly half the length of a typical draft.
+He keeps the argument's spine in order and cuts: lists of extra examples ("From Bologna to Tirana", "Chile, South Africa, Asia, the US"),
+throwaway punchlines ("These aren't marginal grievances.", "We've seen it before."), strings of rhetorical questions, and any idea that repeats.
+
+Example of a section exactly as Roberto published it:
+
+Why it matters:
+The torching of the College of Europe campus in Albania, amid wider student protests in France, Italy and across Europe, points to something deeper than isolated unrest. Young Europeans are facing high housing costs, stagnant wages, weak social mobility and persistent unemployment in parts of Southern and Eastern Europe. That makes the symbolism powerful: an institution associated with European integration and elite opportunity becoming a target of anger from a generation increasingly unsure that the system delivers. These protests matter because economic frustration rarely remains economic. It reshapes politics, weakens centrist parties and creates space for more radical alternatives.
+
+My thoughts on it:
+What strikes me is how familiar this pattern has become across very different societies: young people look at the implicit bargain, study, work hard, play by the rules and build a decent life, and conclude that it no longer works. The protests are symptoms of a deeper institutional problem. Governance systems designed for a different era are struggling to keep pace with economic dislocation, technological change, inequality and climate stress. When democracies fail to deliver opportunity and dignity, simple narratives and populist alternatives become more attractive. The fundamental question is whether our political systems can redesign the social contract fast enough to restore trust before frustration turns into rejection of the system itself.
 
 "TO KEEP AN EYE ON" events:
 - Format: Event name (Date, Location): One provocative question or observation.
@@ -50,6 +63,11 @@ GENERAL RULES:
 - Topics often span: geopolitics, technology (AI, space, robotics, energy), emerging markets, industrial policy, education, science, and global economics.
 - Roberto frequently references: China, the U.S., Europe, Latin America, Africa, Japan, South Korea.
 - He often contrasts market-driven vs state-driven approaches to economic development.`;
+
+/** Roberto publishes each section as ONE paragraph. Safety net if the model splits it. */
+function toSingleParagraph(text: string): string {
+  return text.replace(/\s*\n+\s*/g, " ").replace(/ {2,}/g, " ").trim();
+}
 
 /**
  * Anthropic Claude-backed AI provider with Roberto's style prompt.
@@ -130,8 +148,8 @@ export class AnthropicProvider implements AIProvider {
 
     return {
       titleOptions: parsed.titleOptions || [],
-      whyItMatters: parsed.whyItMatters || "",
-      myThoughts: parsed.myThoughts || "",
+      whyItMatters: toSingleParagraph(parsed.whyItMatters || ""),
+      myThoughts: toSingleParagraph(parsed.myThoughts || ""),
     };
   }
 
@@ -398,8 +416,8 @@ function buildUserPrompt(input: GenerateSectionInput): string {
 
   prompt += `\nReturn a JSON object with exactly these keys:\n`;
   prompt += `- "titleOptions": array of 5 short, punchy title options (following the style examples above)\n`;
-  prompt += `- "whyItMatters": the "Why it matters" section (150-250 words, analytical, macro perspective, flowing paragraphs)\n`;
-  prompt += `- "myThoughts": the "My thoughts on it" section (150-300 words, personal, first person as Roberto, ends with provocative questions to the reader)\n`;
+  prompt += `- "whyItMatters": the "Why it matters" section (ONE single paragraph, 100-150 words, analytical, macro perspective, no line breaks)\n`;
+  prompt += `- "myThoughts": the "My thoughts on it" section (ONE single paragraph, 100-150 words, personal, first person as Roberto, closes on the central question at stake, no line breaks)\n`;
   prompt += `\nCRITICAL RULES:\n`;
   prompt += `- NEVER use em dashes (—). Use commas, periods, or "and" instead.\n`;
   prompt += `- No bullet points inside the sections.\n`;

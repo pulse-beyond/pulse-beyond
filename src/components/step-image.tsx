@@ -112,6 +112,10 @@ export function StepImage({ issueId, sections, latestImage, initialImageDate }: 
         selectedSectionId,
         imageDateInput || undefined
       );
+      if (!result.ok) {
+        setError(`Image generation failed: ${result.error}`);
+        return;
+      }
       setImageData(result.imageData);
       setMimeType(result.mimeType);
     } catch (e) {
@@ -208,7 +212,11 @@ export function StepImage({ issueId, sections, latestImage, initialImageDate }: 
       </div>
 
       {/* Generate button */}
-      <Button onClick={handleGenerate} disabled={!selectedSectionId || generating}>
+      <Button
+        variant={imageData ? "outline" : "default"}
+        onClick={handleGenerate}
+        disabled={!selectedSectionId || generating}
+      >
         {generating ? (
           <span className="inline-flex items-center gap-2">
             <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -244,7 +252,7 @@ export function StepImage({ issueId, sections, latestImage, initialImageDate }: 
               className="w-full rounded-lg"
             />
             <div className="flex gap-2">
-              <Button onClick={handleCopyImage}>Copy Image</Button>
+              <Button variant="secondary" onClick={handleCopyImage}>Copy Image</Button>
               <Button variant="outline" onClick={handleDownload}>
                 Download
               </Button>

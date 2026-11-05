@@ -131,7 +131,11 @@ export function StepLinks({ issueId, links }: Props) {
             onChange={(e) => setToneNote(e.target.value)}
             rows={2}
           />
-          <Button onClick={handleAddLinks} disabled={urlCount === 0 || adding}>
+          <Button
+            variant={subjectCount >= 3 ? "outline" : "default"}
+            onClick={handleAddLinks}
+            disabled={urlCount === 0 || adding}
+          >
             {adding
               ? "Adding..."
               : urlCount > 1

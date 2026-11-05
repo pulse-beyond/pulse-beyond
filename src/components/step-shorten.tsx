@@ -41,7 +41,11 @@ export function StepShorten({ issueId, links, events }: Props) {
         </p>
       </div>
 
-      <Button onClick={handleShorten} disabled={shortening}>
+      <Button
+        variant={allShortened ? "outline" : "default"}
+        onClick={handleShorten}
+        disabled={shortening}
+      >
         {shortening
           ? "Shortening..."
           : allShortened

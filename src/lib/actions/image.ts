@@ -42,10 +42,33 @@ function buildSectionText(content: MainSectionContent): string {
   return `${title}\n\nWhy it matters:\n${content.whyItMatters}\n\nMy thoughts on it:\n${content.myThoughts}`;
 }
 
+export type GenerateImageResult =
+  | { ok: true; imageData: string; mimeType: string }
+  | { ok: false; error: string };
+
 /**
- * Generate an editorial cover image for a newsletter section using OpenAI DALL-E 3.
+ * Generate an editorial cover image for a newsletter section.
+ *
+ * Returns a result object instead of throwing: Next.js strips thrown error
+ * messages from server actions in production, which left the UI showing a
+ * generic error and hid the real cause (e.g. a retired OpenAI model).
  */
 export async function generateImage(
+  issueId: string,
+  sectionId: string,
+  imageDateRaw?: string
+): Promise<GenerateImageResult> {
+  try {
+    const result = await generateImageOrThrow(issueId, sectionId, imageDateRaw);
+    return { ok: true, ...result };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[generateImage] failed:", message);
+    return { ok: false, error: message };
+  }
+}
+
+async function generateImageOrThrow(
   issueId: string,
   sectionId: string,
   /** Optional override (YYYY-MM-DD) for the date rendered into the overlay. Persisted if given. */
@@ -116,7 +139,7 @@ export async function generateImage(
   if (!conceptResponse.ok) {
     const err = await conceptResponse.text();
     console.error("Claude API error:", conceptResponse.status, err);
-    throw new Error(`Claude API error: ${conceptResponse.status}`);
+    throw new Error(`Claude API error ${conceptResponse.status}: ${err.slice(0, 300)}`);
   }
 
   const conceptData = await conceptResponse.json();
@@ -133,9 +156,10 @@ export async function generateImage(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      // gpt-image-1 replaces the retired dall-e-3 model. It returns base64 directly
-      // (no response_format flag). Closest landscape size to the old 1792x1024 is 1536x1024.
-      model: "gpt-image-1",
+      // gpt-image-1 was retired by OpenAI (Nov 2026: "model does not exist").
+      // Overridable via env so the next retirement is a config change, not a deploy.
+      // Returns base64 directly (no response_format flag).
+      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
       prompt,
       n: 1,
       size: "1536x1024",
@@ -146,7 +170,13 @@ export async function generateImage(
   if (!response.ok) {
     const error = await response.text();
     console.error("OpenAI API error:", response.status, error);
-    throw new Error(`OpenAI API error: ${response.status}`);
+    let detail = "";
+    try {
+      detail = JSON.parse(error)?.error?.message ?? "";
+    } catch {
+      detail = error.slice(0, 300);
+    }
+    throw new Error(`OpenAI API error ${response.status}${detail ? `: ${detail}` : ""}`);
   }
 
   const data = await response.json();

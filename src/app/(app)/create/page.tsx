@@ -20,6 +20,8 @@ import type { Metadata } from "next";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
 import { MarkAsPublishedButton } from "@/components/mark-as-published-button";
 import { NewEditionForm } from "@/components/new-edition-form";
+import { overdueDays } from "@/lib/utils";
+import { AlertTriangle } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Create | Snapshot Builder",
@@ -34,6 +36,7 @@ export default async function CreatePage() {
     countPublishedIssues(),
     getUpcomingFridayOptions(8),
   ]);
+  const overdue = issues.filter((i) => overdueDays(i.publishDate) > 0);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -52,6 +55,20 @@ export default async function CreatePage() {
         <NewEditionForm upcomingFridays={fridayPresets} />
       </div>
 
+      {overdue.length > 0 && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-900">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          <div className="text-sm">
+            <p className="font-bold">
+              {overdue.length} edition{overdue.length !== 1 ? "s are" : " is"} past {overdue.length !== 1 ? "their" : "its"} date and still not marked as published.
+            </p>
+            <p>
+              If it went out, click &ldquo;Add as published&rdquo; to move it to Past Editions. If it never will, delete it.
+            </p>
+          </div>
+        </div>
+      )}
+
       {issues.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
@@ -60,14 +77,26 @@ export default async function CreatePage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {issues.map((issue) => (
+          {issues.map((issue) => {
+            const daysLate = overdueDays(issue.publishDate);
+            return (
             <div key={issue.id} className="relative group">
               <Link href={`/issues/${issue.id}`}>
-                <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+                <Card
+                  className={[
+                    "hover:bg-accent/50 transition-colors cursor-pointer",
+                    daysLate > 0 ? "border-2 border-red-500 bg-red-50/50" : "",
+                  ].join(" ")}
+                >
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-lg">{issue.title}</CardTitle>
                       <div className="flex items-center gap-2 shrink-0">
+                        {daysLate > 0 && (
+                          <span className="rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+                            Overdue by {daysLate} day{daysLate !== 1 ? "s" : ""}
+                          </span>
+                        )}
                         <Badge variant="outline">{issue.currentStep}</Badge>
                         {/* Spacer so action buttons don't overlap badge */}
                         <div className="w-32" />
@@ -88,7 +117,8 @@ export default async function CreatePage() {
                 <DeleteIssueButton issueId={issue.id} issueTitle={issue.title} />
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

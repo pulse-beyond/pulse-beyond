@@ -103,6 +103,9 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
   })();
 
   const savedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(item.createdAt));
+  const expiresLabel = item.expiresAt
+    ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(item.expiresAt))
+    : null;
 
   return (
     <article className="rounded-xl border bg-card flex flex-col hover:shadow-sm transition-shadow">
@@ -113,6 +116,13 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
           </span>
           <span className="text-[11px] text-muted-foreground ml-auto">saved {savedAt}</span>
         </div>
+
+        {item.issueLabel && (
+          <p className="text-[11px] text-muted-foreground">
+            For the <span className="font-medium text-foreground">{item.issueLabel}</span> edition
+            {expiresLabel && <> · auto-removed after {expiresLabel}</>}
+          </p>
+        )}
 
         <h3 className="text-sm font-semibold text-foreground leading-snug">
           {item.metaTitle ?? item.url}
@@ -194,9 +204,26 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
 
 // ─── Add Form ─────────────────────────────────────────────────────────────────
 
-function AddBacklogForm() {
+/** Next edition that hasn't happened yet (today counts) — the sensible default. */
+function defaultEditionId(openIssues: OpenIssue[]): string {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const next = openIssues.find(
+    (i) => i.publishDateISO && new Date(i.publishDateISO).getTime() >= today.getTime()
+  );
+  return next?.id ?? "";
+}
+
+function AddBacklogForm({ openIssues }: { openIssues: OpenIssue[] }) {
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
+  const [issueId, setIssueId] = useState(() => defaultEditionId(openIssues));
+  const upcoming = openIssues.filter((i) => {
+    if (!i.publishDateISO) return true;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    return new Date(i.publishDateISO).getTime() >= today.getTime();
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,7 +233,7 @@ function AddBacklogForm() {
     if (!trimmedUrl) return;
     setLoading(true);
     setError(null);
-    const result = await addBacklogItem(trimmedUrl, note || undefined);
+    const result = await addBacklogItem(trimmedUrl, note || undefined, issueId || undefined);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -237,6 +264,22 @@ function AddBacklogForm() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
         </Button>
       </div>
+      <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        For edition
+        <select
+          value={issueId}
+          onChange={(e) => setIssueId(e.target.value)}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+        >
+          {upcoming.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.publishDate ?? i.title}
+            </option>
+          ))}
+          <option value="">No edition (keep until I delete it)</option>
+        </select>
+        <span>· removed automatically 5 days after that edition&apos;s date</span>
+      </label>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </form>
   );
@@ -252,7 +295,7 @@ interface BacklogTabProps {
 export function BacklogTab({ items, openIssues }: BacklogTabProps) {
   return (
     <div className="space-y-6">
-      <AddBacklogForm />
+      <AddBacklogForm openIssues={openIssues} />
 
       {items.length === 0 ? (
         <div className="rounded-lg border bg-muted/30 px-6 py-16 text-center">

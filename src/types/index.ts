@@ -79,6 +79,7 @@ export interface BrainDumpCard {
   url: string; // original article URL
   publishedAt: string; // e.g. "3 days ago"
   topic: string; // primary topic e.g. "AI"
+  aiCentric?: boolean; // main subject is AI (cards cached before Nov 2026 lack it)
   whyItMatters: string; // 2-3 sentences on strategic significance
   robertosAngle: string; // how Roberto would frame this story
   keyFacts: string[]; // 3 bullet points
@@ -105,6 +106,9 @@ export interface BacklogItem {
   metaDescription: string | null;
   note: string | null;
   createdAt: Date;
+  issueId: string | null;
+  issueLabel: string | null; // e.g. "Nov 6, 2026"
+  expiresAt: Date | null; // edition date + 5 days
 }
 
 // Open issue for Brain Dump "Add to Edition" dropdown
@@ -112,6 +116,7 @@ export interface OpenIssue {
   id: string;
   title: string;
   publishDate: string | null; // formatted date string
+  publishDateISO: string | null;
 }
 
 // Analytics — post performance data shape

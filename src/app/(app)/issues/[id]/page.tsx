@@ -13,6 +13,9 @@ import { StepShorten } from "@/components/step-shorten";
 import { StepExport } from "@/components/step-export";
 import { StepImage } from "@/components/step-image";
 import { StepLinkedIn } from "@/components/step-linkedin";
+import { ConcludeEditionButton } from "@/components/conclude-edition-button";
+import { overdueDays } from "@/lib/utils";
+import { AlertTriangle } from "lucide-react";
 
 interface Props {
   params: { id: string };
@@ -54,8 +57,26 @@ export default async function IssuePage({ params }: Props) {
   // "linkedin" is complete if there is at least 1 LinkedIn post draft
   if (issue.linkedInDrafts.length > 0) completedSteps.add("linkedin");
 
+  const daysOverdue = issue.publishedAt ? 0 : overdueDays(issue.publishDate);
+
   return (
     <div className="max-w-6xl mx-auto">
+      {daysOverdue > 0 && (
+        <div className="mb-6 flex flex-col gap-4 rounded-lg border-2 border-red-500 bg-red-50 p-5 text-red-900 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-red-600" />
+            <div>
+              <p className="text-base font-bold">
+                This edition is overdue by {daysOverdue} day{daysOverdue !== 1 ? "s" : ""}.
+              </p>
+              <p className="text-sm">
+                Was it published? Mark it as published to move it to Past Editions.
+              </p>
+            </div>
+          </div>
+          <ConcludeEditionButton issueId={issue.id} label="Yes, mark as published" />
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{issue.title}</h1>
         {issue.publishDate && (
@@ -129,6 +150,7 @@ export default async function IssuePage({ params }: Props) {
             <StepLinkedIn
               issueId={issue.id}
               latestDraft={issue.linkedInDrafts[0] || null}
+              publishSlot={<ConcludeEditionButton issueId={issue.id} size="lg" />}
             />
           )}
         </div>

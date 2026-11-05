@@ -29,6 +29,7 @@ model Issue {
   exports        Export[]
   images         GeneratedImage[]
   linkedInDrafts LinkedInPostDraft[]
+  backlogItems   BacklogItem[]
 }
 
 model LinkItem {
@@ -164,6 +165,13 @@ model BacklogItem {
   metaDescription String?
   note        String?
   createdAt   DateTime @default(now())
+  // Edition this note is meant for. Notes auto-archive 5 days after that edition's date.
+  issueId     String?
+  issue       Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  // Set when the note expires (kept in the DB, hidden from the Brain Dump).
+  archivedAt  DateTime?
+
+  @@index([issueId])
 }
 
 // Newsletter stats — manually updated

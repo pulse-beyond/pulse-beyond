@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { ArticleCard } from "./article-card";
-import { canonicalTopic, isAITopic, AI_LABEL } from "@/lib/topics";
+import { cardBucket, isAITopic, AI_LABEL } from "@/lib/topics";
 import type { BrainDumpCard, BrainDumpTopic, OpenIssue } from "@/types/index";
 
 interface FeedFiltersProps {
@@ -18,10 +18,11 @@ export function FeedFilters({ cards, openIssues, topics }: FeedFiltersProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Each card belongs to exactly ONE bucket: its canonical primary topic.
-  // Counting by primary topic means the dropdown counts sum to the cards shown.
+  // Each card belongs to exactly ONE bucket. A card whose subject is AI lands in the
+  // AI bucket even if its stated topic is e.g. "Digital Infrastructure" — so
+  // unchecking AI really hides the AI stories. Counts still sum to the cards shown.
   function bucketOf(card: BrainDumpCard): string {
-    return canonicalTopic(card.topic, topics);
+    return cardBucket(card, topics);
   }
   function displayLabel(bucket: string): string {
     return isAITopic(bucket) ? AI_LABEL : bucket;

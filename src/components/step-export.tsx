@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { buildExport } from "@/lib/actions/export";
 import { setIssueStep } from "@/lib/actions/issues";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { RichDraftEditor, type RichDraftEditorHandle } from "@/components/rich-draft-editor";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Export } from "@prisma/client";
 
@@ -17,6 +17,7 @@ export function StepExport({ issueId, latestExport }: Props) {
   const [content, setContent] = useState(latestExport?.content || "");
   const [building, setBuilding] = useState(false);
   const [copied, setCopied] = useState(false);
+  const editorRef = useRef<RichDraftEditorHandle>(null);
 
   async function handleBuild(format: "txt" | "md") {
     setBuilding(true);
@@ -29,7 +30,7 @@ export function StepExport({ issueId, latestExport }: Props) {
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(content);
+    await editorRef.current?.copy();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -40,27 +41,26 @@ export function StepExport({ issueId, latestExport }: Props) {
       <div>
         <h2 className="text-lg font-semibold mb-1">Step F: Export</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Generate the final newsletter text. Edit if needed, then copy to clipboard.
+          Generate the final newsletter text. Edit it right here, then copy. Formatting (headings, bold, spacing) is kept when you paste into the LinkedIn article editor.
         </p>
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={() => handleBuild("txt")} disabled={building}>
-          {building ? "Building..." : "Generate Now"}
+        <Button
+          variant={content ? "outline" : "default"}
+          onClick={() => handleBuild("txt")}
+          disabled={building}
+        >
+          {building ? "Building..." : content ? "Regenerate" : "Generate Now"}
         </Button>
       </div>
 
       {content && (
         <Card>
           <CardContent className="p-4 space-y-4">
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={25}
-              className="font-mono text-sm"
-            />
+            <RichDraftEditor ref={editorRef} text={content} />
             <div className="flex gap-2">
-              <Button onClick={handleCopy}>
+              <Button variant="secondary" onClick={handleCopy}>
                 {copied ? "Copied!" : "Copy to Clipboard"}
               </Button>
             </div>
