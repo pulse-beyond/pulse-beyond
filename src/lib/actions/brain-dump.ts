@@ -154,7 +154,8 @@ function formatDateLong(d: Date): string {
 //     filter and the per-topic cap treat any AI-centric card as AI (see topics.ts).
 
 const TOPICS_PER_GROUP = 4;
-const STORIES_PER_GROUP = 5;
+// Ask for more than we show: roughly half of GPT-4o's links fail verification and are dropped.
+const STORIES_PER_GROUP = 8;
 
 function groupTopics(topics: BrainDumpTopic[]): { topics: BrainDumpTopic[]; isAI: boolean }[] {
   const ai = topics.filter((t) => isAITopic(t.name));
@@ -205,6 +206,18 @@ If you cannot confirm a story was published within this exact date range, exclud
 ${aiRule}
 ${buildEditorialDNA(allTopics)}
 
+HOW TO SEARCH:
+- Run several SHORT, separate web searches, at least one per focus topic, each 3-8 words plus the month,
+  e.g. "fusion energy news November 2026", "sovereign wealth fund deep tech investment this week".
+- Never paste these instructions into the search box.
+
+LINKS — THIS IS CRITICAL:
+- "url" must be copied EXACTLY from a page your web search returned. Never type, guess, reconstruct or
+  "clean up" a URL from memory. Any URL that is not in your search results is discarded automatically.
+- The url must be the article itself, not a section, category, tag or home page.
+- Only report what the article actually says. Do not present old events (e.g. a bank founded years ago) as new.
+- Returning 2 real stories is far better than 5 with invented links.
+
 INSTRUCTIONS:
 - Search for real, recent stories published between ${startStr} and ${endStr} ONLY
 - Prioritize Tier 1 sources when available
@@ -234,7 +247,112 @@ Return ONLY a valid JSON array (no markdown, no explanation, no code blocks) wit
 }
 
 /** One web-search call → parsed cards. */
-async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCard[]> {
+/** Normalize a URL for comparison: no protocol, www, query, hash or trailing slash. */
+function normalizeUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw.trim());
+    return (u.hostname.replace(/^www\./, "") + u.pathname.replace(/\/+$/, "")).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** Section/home pages ("/category/renewables", "/") are not articles. */
+function looksLikeArticle(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (segs.length === 0) return false;
+    if (/^(category|categories|tag|tags|topic|topics|section|archive|search)$/i.test(segs[0])) return false;
+    return segs.join("/").length >= 12;
+  } catch {
+    return false;
+  }
+}
+
+/** A /YYYY/MM/(DD/) path older than the search window means an old story. */
+function urlDateTooOld(raw: string, start: Date): boolean {
+  const m = raw.match(/\/(20\d{2})[/-](\d{1,2})(?:[/-](\d{1,2}))?(?:[/-]|$)/);
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return false;
+  const day = m[3] ? Number(m[3]) : 28; // month-only paths: give the benefit of the doubt
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getTime() < start.getTime() - 2 * 86_400_000;
+}
+
+/** "2 weeks ago", "3 months ago", "last year"... is outside a weekly window. */
+function publishedTooLongAgo(publishedAt: string | undefined): boolean {
+  if (!publishedAt) return false;
+  const p = publishedAt.toLowerCase();
+  if (/\b(month|months|year|years)\b/.test(p)) return true;
+  const weeks = p.match(/(\d+)\s*weeks?/);
+  if (weeks && Number(weeks[1]) >= 2) return true;
+  const days = p.match(/(\d+)\s*days?/);
+  return !!days && Number(days[1]) > 10;
+}
+
+/**
+ * Does the page exist? A plain GET (no disguise): 200 on an article-like final URL.
+ * Publishers return a real 404 for invented slugs; anything we can't confirm is dropped.
+ */
+async function urlResolves(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SnapshotBuilder/1.0)" },
+      signal: AbortSignal.timeout(6000),
+    });
+    res.body?.cancel().catch(() => {});
+    return res.ok && looksLikeArticle(res.url || url);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * GPT-4o writes the JSON itself and routinely invents plausible URLs from memory
+ * (e.g. nature.com/articles/fusion-energy-breakthrough-2026, an Al Jazeera "BRICS
+ * founds a development bank" story that 404s) even with web search on.
+ * A card survives only if its URL is one the search returned, or (the API's source
+ * list is incomplete) the page actually exists.
+ */
+async function keepVerifiedCards(
+  cards: BrainDumpCard[],
+  searchedUrls: Set<string>,
+  start: Date
+): Promise<BrainDumpCard[]> {
+  const checked = await Promise.all(
+    cards.map(async (card) => {
+      const norm = card.url ? normalizeUrl(card.url) : null;
+      let reason: string | null = !norm
+        ? "bad url"
+        : !looksLikeArticle(card.url)
+        ? "not an article page"
+        : urlDateTooOld(card.url, start) || publishedTooLongAgo(card.publishedAt)
+        ? "old story"
+        : null;
+      if (!reason && !searchedUrls.has(norm!) && !(await urlResolves(card.url))) {
+        reason = "url not found in search results and does not resolve (invented)";
+      }
+      if (reason) {
+        console.warn(`[brain-dump] dropped card (${reason}): ${card.url}`);
+        return null;
+      }
+      // Strip OpenAI's tracking param so the saved link is the clean article URL.
+      try {
+        const u = new URL(card.url);
+        u.searchParams.delete("utm_source");
+        card.url = u.toString();
+      } catch {}
+      return card;
+    })
+  );
+  return checked.filter((c): c is BrainDumpCard => c !== null);
+}
+
+async function searchCards(apiKey: string, prompt: string, start: Date): Promise<BrainDumpCard[]> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     cache: "no-store",
@@ -246,6 +364,8 @@ async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCar
       model: "gpt-4o",
       tools: [{ type: "web_search_preview" }],
       tool_choice: "required",
+      // Return every page the search tool actually fetched, so we can verify URLs.
+      include: ["web_search_call.action.sources"],
       input: prompt,
     }),
   });
@@ -258,11 +378,22 @@ async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCar
   const data = await response.json();
 
   let rawText = "";
+  const searchedUrls = new Set<string>();
+  const addUrl = (u: unknown) => {
+    const n = typeof u === "string" ? normalizeUrl(u) : null;
+    if (n) searchedUrls.add(n);
+  };
   if (data.output && Array.isArray(data.output)) {
     for (const item of data.output) {
+      if (item.type === "web_search_call") {
+        for (const src of item.action?.sources ?? []) addUrl(src?.url);
+      }
       if (item.type === "message" && item.content) {
         for (const block of item.content) {
           if (block.type === "output_text") rawText += block.text;
+          for (const ann of block.annotations ?? []) {
+            if (ann?.type === "url_citation") addUrl(ann.url);
+          }
         }
       }
     }
@@ -282,8 +413,9 @@ async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCar
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2013\u2014]/g, "-");
 
+  let parsed: BrainDumpCard[];
   try {
-    return JSON.parse(jsonStr);
+    parsed = JSON.parse(jsonStr);
   } catch {
     // Salvage individual objects from a truncated/broken array.
     const objectMatches = jsonStr.match(/\{[\s\S]*?\}(?=\s*[,\]])/g) ?? [];
@@ -298,8 +430,9 @@ async function searchCards(apiKey: string, prompt: string): Promise<BrainDumpCar
     if (cards.length === 0) {
       throw new Error(`JSON parse failed. Raw: ${jsonStr.slice(0, 300)}`);
     }
-    return cards;
+    parsed = cards;
   }
+  return keepVerifiedCards(parsed, searchedUrls, start);
 }
 
 export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
@@ -324,21 +457,43 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
 
   const results = await Promise.allSettled(
     groups.map((g) =>
-      searchCards(
-        apiKey,
-        buildSearchPrompt({
-          today,
-          startStr,
-          endStr,
-          groupTopics: g.topics,
-          allTopics: topics,
-          isAIGroup: g.isAI,
-          count: g.isAI ? maxPerTopic : STORIES_PER_GROUP,
-        })
-      ).then((cards) =>
-        // Safety net: a non-AI group that still returns AI stories doesn't get to keep them.
-        g.isAI ? cards : cards.filter((c) => !isAICard(c))
-      )
+    (async () => {
+      const prompt = buildSearchPrompt({
+        today,
+        startStr,
+        endStr,
+        groupTopics: g.topics,
+        allTopics: topics,
+        isAIGroup: g.isAI,
+        count: g.isAI ? Math.max(maxPerTopic, 6) : STORIES_PER_GROUP,
+      });
+      // Safety net: a non-AI group that still returns AI stories doesn't get to keep them.
+      const clean = (cs: BrainDumpCard[]) => (g.isAI ? cs : cs.filter((c) => !isAICard(c)));
+      let cards = clean(await searchCards(apiKey, prompt, start));
+      // Most of a group's links can fail verification; one more search usually finds real ones.
+      // Retry topic by topic: a narrower search returns real articles instead of nothing.
+      if (cards.length < 2) {
+        const retries = await Promise.all(
+          g.topics.map((t) =>
+            searchCards(
+              apiKey,
+              buildSearchPrompt({
+                today,
+                startStr,
+                endStr,
+                groupTopics: [t],
+                allTopics: topics,
+                isAIGroup: g.isAI,
+                count: 3,
+              }),
+              start
+            ).catch(() => [] as BrainDumpCard[])
+          )
+        );
+        cards = cards.concat(clean(retries.flat()));
+      }
+      return cards;
+    })()
     )
   );
 
@@ -361,8 +516,17 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
     throw new Error(failures[0]);
   }
 
+  // The same article can come back from two searches.
+  const seenUrls = new Set<string>();
+  const unique = cards.filter((c) => {
+    const k = normalizeUrl(c.url) ?? c.url;
+    if (seenUrls.has(k)) return false;
+    seenUrls.add(k);
+    return true;
+  });
+
   // Interleave groups so the feed opens with a mix rather than one block per group.
-  const interleaved = interleaveByTopic(cards, topics);
+  const interleaved = interleaveByTopic(unique, topics);
 
   return interleaved.map((card, i) => ({
     ...card,
