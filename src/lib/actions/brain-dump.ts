@@ -346,6 +346,7 @@ async function keepVerifiedCards(
         u.searchParams.delete("utm_source");
         card.url = u.toString();
       } catch {}
+      card.verified = true;
       return card;
     })
   );
@@ -684,7 +685,9 @@ export async function refreshBrainDump(): Promise<void> {
   if (existing.fetchedAt) {
     const { start: cachedWindowStart } = getEditionWindowForDate(new Date(existing.fetchedAt));
     if (cachedWindowStart.getTime() === currentWindowStart.getTime()) {
-      existingCards = existing.cards; // same week → keep
+      // same week → keep, except cards from before link verification existed
+      // (those include invented URLs and old stories).
+      existingCards = existing.cards.filter((c) => c.verified);
     }
     // different week → existingCards stays empty (reset)
   }

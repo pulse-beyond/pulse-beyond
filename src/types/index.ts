@@ -79,7 +79,9 @@ export interface BrainDumpCard {
   url: string; // original article URL
   publishedAt: string; // e.g. "3 days ago"
   topic: string; // primary topic e.g. "AI"
-  aiCentric?: boolean; // main subject is AI (cards cached before Nov 2026 lack it)
+  aiCentric?: boolean;
+  /** Link confirmed against the web search results / a live request. Older cards lack it. */
+  verified?: boolean; // main subject is AI (cards cached before Nov 2026 lack it)
   whyItMatters: string; // 2-3 sentences on strategic significance
   robertosAngle: string; // how Roberto would frame this story
   keyFacts: string[]; // 3 bullet points
