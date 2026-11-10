@@ -218,6 +218,13 @@ LINKS — THIS IS CRITICAL:
 - Only report what the article actually says. Do not present old events (e.g. a bank founded years ago) as new.
 - Returning 2 real stories is far better than 5 with invented links.
 
+TOPIC FIT — THIS IS CRITICAL:
+- Every story must clearly fall under one focus topic AS DESCRIBED above (its sub-themes), not merely touch the topic's name.
+- It must pass the editorial filter: a strategic signal with consequences beyond the story itself.
+- Skip local curiosities, single product launches or redesigns, a single species found somewhere, routine corporate news,
+  lifestyle pieces and listicles — unless the article itself shows a structural shift.
+- Fewer stories that fit beat more stories that don't.
+
 INSTRUCTIONS:
 - Search for real, recent stories published between ${startStr} and ${endStr} ONLY
 - Prioritize Tier 1 sources when available
@@ -264,7 +271,13 @@ function looksLikeArticle(raw: string): boolean {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length === 0) return false;
     if (/^(category|categories|tag|tags|topic|topics|section|archive|search)$/i.test(segs[0])) return false;
-    return segs.join("/").length >= 12;
+    if (segs.join("/").length < 12) return false;
+    // Hub pages end in a short slug ("/fusion-energy/", "/policy/fusion-industry-highlights/");
+    // articles end in a long slug or carry an id/date number somewhere in the path.
+    const last = segs[segs.length - 1].replace(/\.(html?|php|aspx?)$/i, "");
+    const words = last.split(/[-_]+/).filter(Boolean).length;
+    const hasId = /\d{4,}/.test(u.pathname); // id or date anywhere in the path
+    return words >= 5 || hasId || (words >= 3 && segs.length >= 3);
   } catch {
     return false;
   }
@@ -436,6 +449,78 @@ async function searchCards(apiKey: string, prompt: string, start: Date): Promise
   return keepVerifiedCards(parsed, searchedUrls, start);
 }
 
+// ─── Relevance gate ──────────────────────────────────────────────────────────
+// Real links aren't enough: the search also returns real-but-trivial stories
+// (a wetsuit redesign, an orchid found in one park). Score each card 1-5 for fit
+// with Roberto's topics + editorial filter; keep RELEVANCE_MIN and up.
+
+const RELEVANCE_MIN = 3;
+
+async function keepRelevantCards(
+  apiKey: string,
+  cards: BrainDumpCard[],
+  topics: BrainDumpTopic[]
+): Promise<BrainDumpCard[]> {
+  if (cards.length === 0) return cards;
+  const topicList = topics.map((t) => `- ${t.name}: ${t.description}`).join("\n");
+  const items = cards
+    .map((c, i) => `${i}. [${c.topic}] ${c.title} (${c.source}) — ${c.whyItMatters ?? ""}`)
+    .join("\n");
+  const prompt = `You curate stories for Weekly Snapshot, a strategic newsletter for investors, executives and policymakers
+about science and technology and their geopolitical and economic consequences.
+
+The editor's topics (a story must fit one AS DESCRIBED):
+${topicList}
+
+Score each story from 1 to 5:
+5 = squarely in a topic, clear strategic signal (power, markets, sovereignty, structural shift)
+4 = fits a topic well, meaningful consequences
+3 = fits a topic, modest but real significance
+2 = loosely related, or trivial (local curiosity, single product or redesign, routine corporate news, lifestyle)
+1 = off-topic
+
+Stories:
+${items}
+
+Return ONLY JSON: {"scores":[{"i":0,"score":4,"reason":"few words"}, ...]} with one entry per story.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    const scores = new Map<number, { score: number; reason?: string }>();
+    for (const s of parsed.scores ?? []) {
+      if (typeof s?.i === "number" && typeof s?.score === "number") scores.set(s.i, s);
+    }
+    return cards.filter((card, i) => {
+      const s = scores.get(i);
+      if (!s) return true; // unscored → don't punish the card for the grader's omission
+      card.relevance = s.score;
+      if (s.score < RELEVANCE_MIN) {
+        console.warn(`[brain-dump] dropped card (relevance ${s.score}: ${s.reason ?? ""}): ${card.title}`);
+        return false;
+      }
+      return true;
+    });
+  } catch (err) {
+    // Fail open, but loudly: a broken grader must not empty the feed.
+    console.error("[brain-dump] relevance check failed, keeping all cards:", err);
+    return cards;
+  }
+}
+
 export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -526,8 +611,12 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
     return true;
   });
 
+  // Search models drift to whatever is loudest; a second, cheap pass judges each card
+  // against Roberto's topic descriptions and editorial filter and drops the weak ones.
+  const relevant = await keepRelevantCards(apiKey, unique, topics);
+
   // Interleave groups so the feed opens with a mix rather than one block per group.
-  const interleaved = interleaveByTopic(unique, topics);
+  const interleaved = interleaveByTopic(relevant, topics);
 
   return interleaved.map((card, i) => ({
     ...card,
@@ -687,7 +776,7 @@ export async function refreshBrainDump(): Promise<void> {
     if (cachedWindowStart.getTime() === currentWindowStart.getTime()) {
       // same week → keep, except cards from before link verification existed
       // (those include invented URLs and old stories).
-      existingCards = existing.cards.filter((c) => c.verified);
+      existingCards = existing.cards.filter((c) => c.verified && (c.relevance ?? 0) >= RELEVANCE_MIN);
     }
     // different week → existingCards stays empty (reset)
   }

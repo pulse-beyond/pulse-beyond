@@ -82,6 +82,8 @@ export interface BrainDumpCard {
   aiCentric?: boolean; // main subject is AI (cards cached before Nov 2026 lack it)
   /** Link confirmed against the web search results / a live request. Older cards lack it. */
   verified?: boolean;
+  /** 1-5 fit with the topics + editorial filter (relevance gate). Older cards lack it. */
+  relevance?: number;
   whyItMatters: string; // 2-3 sentences on strategic significance
   robertosAngle: string; // how Roberto would frame this story
   keyFacts: string[]; // 3 bullet points
