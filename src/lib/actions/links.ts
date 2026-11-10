@@ -5,20 +5,25 @@ import { fetchUrlMetadata } from "@/lib/url-metadata";
 import { revalidatePath } from "next/cache";
 import { put, del } from "@vercel/blob";
 
-/** Add a new link to an issue, fetching URL metadata automatically */
+/** Add a new link to an issue, fetching URL metadata automatically.
+ *  If the issue already has a link with this exact URL, returns it instead of
+ *  creating a duplicate (double Enter, or the same item added from Brain Dump/backlog). */
 export async function addLink(
   issueId: string,
   url: string,
   toneNote?: string,
   subjectGroup?: string
 ) {
+  const existing = await prisma.linkItem.findFirst({ where: { issueId, url } });
+  if (existing) return existing;
+
   // Count existing links to set order
   const count = await prisma.linkItem.count({ where: { issueId } });
 
   // Fetch metadata in background (non-blocking for UX)
   const metadata = await fetchUrlMetadata(url);
 
-  await prisma.linkItem.create({
+  const link = await prisma.linkItem.create({
     data: {
       issueId,
       url,
@@ -31,6 +36,7 @@ export async function addLink(
   });
 
   revalidatePath(`/issues/${issueId}`);
+  return link;
 }
 
 /** Manually set a link's title (when the site blocks automatic title fetching). */

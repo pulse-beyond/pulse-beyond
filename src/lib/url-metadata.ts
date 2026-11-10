@@ -10,6 +10,12 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&apos;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/g, "'")
+    .replace(/&[lr]squo;/g, "'")
+    .replace(/&[lr]dquo;/g, '"')
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/&hellip;/g, "…")
+    .replace(/&nbsp;/g, " ")
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
@@ -17,10 +23,11 @@ function decodeHtmlEntities(str: string): string {
 const USER_AGENT = "Mozilla/5.0 (compatible; SnapshotBuilder/1.0)";
 
 function metaContent(html: string, attr: "property" | "name", key: string): string | null {
-  // content can come before or after the property/name attribute
-  const a = new RegExp(`<meta[^>]+${attr}=["']${key}["'][^>]*content=["']([^"']+)["']`, "i");
-  const b = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*${attr}=["']${key}["']`, "i");
-  return html.match(a)?.[1] ?? html.match(b)?.[1] ?? null;
+  // content can come before or after the property/name attribute. Match the closing
+  // quote of the SAME kind: "Micron's $4.5 billion…" must not stop at the apostrophe.
+  const a = new RegExp(`<meta[^>]+${attr}=["']${key}["'][^>]*content=(["'])(.*?)\\1`, "i");
+  const b = new RegExp(`<meta[^>]+content=(["'])(.*?)\\1[^>]*${attr}=["']${key}["']`, "i");
+  return html.match(a)?.[2] || html.match(b)?.[2] || null;
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
@@ -54,7 +61,8 @@ export async function fetchUrlMetadata(
     const title = candidates.find((t) => !isBlockedTitle(t)) ?? null;
 
     const description =
-      metaContent(html, "name", "description") ?? metaContent(html, "property", "og:description");
+      // og:description is the article summary; some sites put a teaser in <meta name="description">.
+      metaContent(html, "property", "og:description") ?? metaContent(html, "name", "description");
 
     return {
       title,

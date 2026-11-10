@@ -19,7 +19,7 @@ export async function createIssue(formData?: FormData) {
   // Count how many issues already exist for this day
   const { start, end } = dayBounds(targetDate);
   const existingCount = await prisma.issue.count({
-    where: { publishDate: { gte: start, lte: end } },
+    where: { publishDate: { gte: start, lte: end }, dismissedAt: null },
   });
 
   const title =
@@ -104,7 +104,19 @@ export async function setIssueStep(issueId: string, step: string) {
 
 /** Delete an issue */
 export async function deleteIssue(issueId: string) {
-  await prisma.issue.delete({ where: { id: issueId } });
+  const issue = await prisma.issue.delete({ where: { id: issueId } });
+  // An auto-created Friday would come right back on the next /create load
+  // (ensureUpcomingIssues). Leave an empty tombstone with the same id instead.
+  if (issueId.startsWith("auto-")) {
+    await prisma.issue.create({
+      data: {
+        id: issueId,
+        title: issue.title,
+        publishDate: issue.publishDate,
+        dismissedAt: new Date(),
+      },
+    });
+  }
   revalidatePath("/create");
   revalidatePath("/issues");
   redirect("/create");
@@ -113,7 +125,7 @@ export async function deleteIssue(issueId: string) {
 /** Get all active (unpublished) issues ordered by publish date ascending (soonest first) */
 export async function getIssues() {
   return prisma.issue.findMany({
-    where: { publishedAt: null },
+    where: { publishedAt: null, dismissedAt: null },
     orderBy: [{ publishDate: "asc" }, { createdAt: "asc" }],
     include: {
       _count: { select: { links: true, events: true } },

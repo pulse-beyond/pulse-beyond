@@ -202,7 +202,7 @@ RULES:
 - Descriptions should be provocative questions, not statements
 - No em dashes
 - Sort events by date
-- For sourceUrl, provide a real, verifiable URL where the user can read more about the event (official event page, news article, or institutional website). If you are not confident the URL exists, omit the field.`;
+- For sourceUrl, provide a real, verifiable URL where the user can read more about the event (the event's own official page or a news article about it; never an events calendar or aggregator listing). If you are not confident the URL exists, omit the field.`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

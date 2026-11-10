@@ -17,13 +17,21 @@ export function StepExport({ issueId, latestExport }: Props) {
   const [content, setContent] = useState(latestExport?.content || "");
   const [building, setBuilding] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const editorRef = useRef<RichDraftEditorHandle>(null);
 
   async function handleBuild(format: "txt" | "md") {
     setBuilding(true);
+    setError(null);
     try {
       const result = await buildExport(issueId, format);
       setContent(result);
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not build the export. Please try again."
+      );
     } finally {
       setBuilding(false);
     }
@@ -54,6 +62,8 @@ export function StepExport({ issueId, latestExport }: Props) {
           {building ? "Building..." : content ? "Regenerate" : "Generate Now"}
         </Button>
       </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {content && (
         <Card>

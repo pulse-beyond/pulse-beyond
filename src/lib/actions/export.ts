@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import type { MainSectionContent } from "@/types";
+import { usableTitle } from "@/lib/link-utils";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -54,10 +55,14 @@ export async function buildExport(
     const content: MainSectionContent = JSON.parse(
       section.editedContent || section.content
     );
+    const fallbackTitle =
+      content.titleOptions?.[0] ||
+      usableTitle(section.linkItem?.metaTitle) ||
+      `Topic ${i + 1}`;
     const title =
-      content.selectedTitle === "__custom__"
-        ? content.customTitle || content.titleOptions[0]
-        : content.selectedTitle || content.titleOptions[0];
+      (content.selectedTitle === "__custom__"
+        ? content.customTitle
+        : content.selectedTitle) || fallbackTitle;
 
     // Spacing mirrors what Roberto publishes: a blank line between every block.
     // 👉 Section title
@@ -115,7 +120,11 @@ export async function buildExport(
 
   // ── Read more section ──
   // Group links by section title, then append any event source URLs
-  if (sectionLinks.length > 0 || issue.events.some((e) => e.sourceUrl || e.shortUrl)) {
+  const eventLinks = issue.events
+    .map((e) => ({ title: e.title, url: e.shortUrl || e.sourceUrl }))
+    .filter((e): e is { title: string; url: string } => !!e.url);
+
+  if (sectionLinks.length > 0 || eventLinks.length > 0) {
     lines.push("");
     lines.push(
       "You can read more about each topic by accessing the links below."
@@ -128,6 +137,14 @@ export async function buildExport(
       for (const url of group.urls) {
         lines.push(`* ${url}`);
       }
+      lines.push("");
+    }
+
+    // Event links, each labelled with the event name
+    for (const ev of eventLinks) {
+      lines.push(ev.title);
+      lines.push("");
+      lines.push(`* ${ev.url}`);
       lines.push("");
     }
   }

@@ -98,6 +98,7 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
   async function handleAdd() {
     if (!title.trim() || !date.trim() || !location.trim()) return;
     setAdding(true);
+    setFetchError(null);
     try {
       await addEvent(issueId, {
         title: title.trim(),
@@ -113,6 +114,12 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
       setLocation("");
       setDescription("");
       setSourceUrl("");
+    } catch (e) {
+      setFetchError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not add the event. Please try again."
+      );
     } finally {
       setAdding(false);
     }
@@ -250,14 +257,13 @@ export function StepEvents({ issueId, events, publishDate }: Props) {
           <Button
             variant={events.some((e) => e.included) ? "default" : "outline"}
             onClick={() => setIssueStep(issueId, "shorten")}
-            disabled={events.filter((e) => e.included).length === 0}
           >
             Next
           </Button>
         </div>
         {events.length > 0 && events.filter((e) => e.included).length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Include at least one event to continue.
+            No events included: the &quot;To keep an eye on&quot; section will be left out of this edition.
           </p>
         )}
       </div>
@@ -285,6 +291,7 @@ function EventCard({ event }: { event: EventItem }) {
   const [location, setLocation] = useState(event.location);
   const [description, setDescription] = useState(event.description);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const hasChanges =
     title !== event.title ||
@@ -294,6 +301,7 @@ function EventCard({ event }: { event: EventItem }) {
 
   async function handleSave() {
     setSaving(true);
+    setSaveError(null);
     try {
       await updateEvent(event.id, {
         title: title.trim(),
@@ -302,6 +310,12 @@ function EventCard({ event }: { event: EventItem }) {
         description: description.trim(),
       });
       setEditing(false);
+    } catch (e) {
+      setSaveError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not save the event. Please try again."
+      );
     } finally {
       setSaving(false);
     }
@@ -312,6 +326,7 @@ function EventCard({ event }: { event: EventItem }) {
     setDate(event.date);
     setLocation(event.location);
     setDescription(event.description);
+    setSaveError(null);
     setEditing(false);
   }
 
@@ -354,6 +369,9 @@ function EventCard({ event }: { event: EventItem }) {
               Cancel
             </Button>
           </div>
+          {saveError && (
+            <p className="text-sm text-destructive">{saveError}</p>
+          )}
         </CardContent>
       </Card>
     );

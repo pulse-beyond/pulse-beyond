@@ -3,7 +3,7 @@ import GoogleProvider from "next-auth/providers/google";
 
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
   .split(",")
-  .map((e) => e.trim())
+  .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
 export const authOptions: NextAuthOptions = {
@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user }) {
       if (ALLOWED_EMAILS.length === 0) return false;
-      return ALLOWED_EMAILS.includes(user.email ?? "");
+      return ALLOWED_EMAILS.includes((user.email ?? "").trim().toLowerCase());
     },
   },
   pages: {

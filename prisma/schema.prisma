@@ -20,6 +20,9 @@ model Issue {
   currentStep String  @default("links")
   // Set when the user marks this edition as published — moves it to Past Editions
   publishedAt DateTime?
+  // Set when the user deletes an auto-created Friday edition. The row stays as a
+  // tombstone so ensureUpcomingIssues() doesn't recreate that Friday.
+  dismissedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

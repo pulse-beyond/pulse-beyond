@@ -25,6 +25,8 @@ import type {
 } from "@/lib/actions/analytics";
 
 export const dynamic = "force-dynamic";
+// AI insights call can take up to 90s; default Vercel limit would cut it off.
+export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: "Analytics | Snapshot Builder",
@@ -98,6 +100,46 @@ export default async function AnalyticsPage() {
         <ExcelUploadButton />
       </div>
 
+      {/* Newsletter section — independent of the LinkedIn snapshot */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Newsletter
+          </h2>
+          <NewsletterUploadButton />
+        </div>
+        {newsletter ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard
+              label="Assinantes"
+              value={newsletter.subscribers.toLocaleString("pt-BR")}
+              icon={Users}
+            />
+            <StatCard
+              label="Visualizações de artigo"
+              value={newsletter.articleViews.toLocaleString("pt-BR")}
+              icon={BookOpen}
+            />
+            <StatCard
+              label="Impressões (artigos)"
+              value={newsletter.impressions.toLocaleString("pt-BR")}
+              icon={Eye}
+            />
+            <StatCard
+              label="Engajamentos (artigos)"
+              value={newsletter.engagements.toLocaleString("pt-BR")}
+              icon={Heart}
+            />
+          </div>
+        ) : (
+          <Card className="border-dashed">
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              Faça upload do screenshot da sua newsletter para importar os dados automaticamente.
+            </CardContent>
+          </Card>
+        )}
+      </section>
+
       {!hasData ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
@@ -110,45 +152,6 @@ export default async function AnalyticsPage() {
         </Card>
       ) : (
         <>
-          {/* Newsletter section — shows stats if available, upload button otherwise */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Newsletter
-              </h2>
-              <NewsletterUploadButton />
-            </div>
-            {newsletter ? (
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <StatCard
-                  label="Assinantes"
-                  value={newsletter.subscribers.toLocaleString("pt-BR")}
-                  icon={Users}
-                />
-                <StatCard
-                  label="Visualizações de artigo"
-                  value={newsletter.articleViews.toLocaleString("pt-BR")}
-                  icon={BookOpen}
-                />
-                <StatCard
-                  label="Impressões (artigos)"
-                  value={newsletter.impressions.toLocaleString("pt-BR")}
-                  icon={Eye}
-                />
-                <StatCard
-                  label="Engajamentos (artigos)"
-                  value={newsletter.engagements.toLocaleString("pt-BR")}
-                  icon={Heart}
-                />
-              </div>
-            ) : (
-              <Card className="border-dashed">
-                <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                  Faça upload do screenshot da sua newsletter para importar os dados automaticamente.
-                </CardContent>
-              </Card>
-            )}
-          </section>
 
           <section>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">

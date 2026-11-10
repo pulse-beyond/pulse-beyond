@@ -264,8 +264,11 @@ function normalizeUrl(raw: string): string | null {
   }
 }
 
-/** Section/home pages ("/category/renewables", "/") are not articles. */
-function looksLikeArticle(raw: string): boolean {
+/** Section/home pages ("/category/renewables", "/") are not articles.
+ *  `inSearchResults`: the URL came back from the web search itself, so a shorter slug
+ *  (3+ words, e.g. spectrum.ieee.org/china-chip-export-controls) is accepted. URLs only
+ *  confirmed by a live GET keep the strict rule. 2-word hubs ("/fusion-energy/") fail both. */
+function looksLikeArticle(raw: string, inSearchResults = false): boolean {
   try {
     const u = new URL(raw);
     const segs = u.pathname.split("/").filter(Boolean);
@@ -277,6 +280,7 @@ function looksLikeArticle(raw: string): boolean {
     const last = segs[segs.length - 1].replace(/\.(html?|php|aspx?)$/i, "");
     const words = last.split(/[-_]+/).filter(Boolean).length;
     const hasId = /\d{4,}/.test(u.pathname); // id or date anywhere in the path
+    if (inSearchResults && words >= 3) return true;
     return words >= 5 || hasId || (words >= 3 && segs.length >= 3);
   } catch {
     return false;
@@ -339,14 +343,15 @@ async function keepVerifiedCards(
   const checked = await Promise.all(
     cards.map(async (card) => {
       const norm = card.url ? normalizeUrl(card.url) : null;
+      const inSearch = !!norm && searchedUrls.has(norm);
       let reason: string | null = !norm
         ? "bad url"
-        : !looksLikeArticle(card.url)
+        : !looksLikeArticle(card.url, inSearch)
         ? "not an article page"
         : urlDateTooOld(card.url, start) || publishedTooLongAgo(card.publishedAt)
         ? "old story"
         : null;
-      if (!reason && !searchedUrls.has(norm!) && !(await urlResolves(card.url))) {
+      if (!reason && !inSearch && !(await urlResolves(card.url))) {
         reason = "url not found in search results and does not resolve (invented)";
       }
       if (reason) {
@@ -366,10 +371,40 @@ async function keepVerifiedCards(
   return checked.filter((c): c is BrainDumpCard => c !== null);
 }
 
+/** GPT's JSON (especially objects salvaged from a broken array) can miss fields or use
+ *  the wrong types; a card missing `source`/`topicTags` used to crash the whole feed. */
+function normalizeCard(raw: unknown): BrainDumpCard | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const strArr = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
+  const url = str(r.url);
+  const title = str(r.title);
+  if (!url || !title) return null;
+  return {
+    id: str(r.id),
+    title,
+    source: str(r.source),
+    url,
+    publishedAt: str(r.publishedAt),
+    topic: str(r.topic),
+    aiCentric: typeof r.aiCentric === "boolean" ? r.aiCentric : undefined,
+    whyItMatters: str(r.whyItMatters),
+    robertosAngle: str(r.robertosAngle),
+    keyFacts: strArr(r.keyFacts),
+    topicTags: strArr(r.topicTags),
+  };
+}
+
+/** Per-call cap on one web-search request, so one hung group can't eat the whole refresh. */
+const SEARCH_TIMEOUT_MS = 90_000;
+
 async function searchCards(apiKey: string, prompt: string, start: Date): Promise<BrainDumpCard[]> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     cache: "no-store",
+    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -427,13 +462,14 @@ async function searchCards(apiKey: string, prompt: string, start: Date): Promise
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2013\u2014]/g, "-");
 
-  let parsed: BrainDumpCard[];
+  let parsed: unknown[];
   try {
-    parsed = JSON.parse(jsonStr);
+    const p = JSON.parse(jsonStr);
+    parsed = Array.isArray(p) ? p : [];
   } catch {
     // Salvage individual objects from a truncated/broken array.
     const objectMatches = jsonStr.match(/\{[\s\S]*?\}(?=\s*[,\]])/g) ?? [];
-    const cards: BrainDumpCard[] = [];
+    const cards: unknown[] = [];
     for (const obj of objectMatches) {
       try {
         cards.push(JSON.parse(obj));
@@ -446,7 +482,10 @@ async function searchCards(apiKey: string, prompt: string, start: Date): Promise
     }
     parsed = cards;
   }
-  return keepVerifiedCards(parsed, searchedUrls, start);
+  const normalized = parsed
+    .map(normalizeCard)
+    .filter((c): c is BrainDumpCard => c !== null);
+  return keepVerifiedCards(normalized, searchedUrls, start);
 }
 
 // ─── Relevance gate ──────────────────────────────────────────────────────────
@@ -506,7 +545,13 @@ Return ONLY JSON: {"scores":[{"i":0,"score":4,"reason":"few words"}, ...]} with 
     }
     return cards.filter((card, i) => {
       const s = scores.get(i);
-      if (!s) return true; // unscored → don't punish the card for the grader's omission
+      if (!s) {
+        // Unscored → don't punish the card for the grader's omission; mark it ungraded
+        // so later same-week refreshes keep it instead of reading "no relevance" as 0.
+        card.graded = false;
+        return true;
+      }
+      card.graded = true;
       card.relevance = s.score;
       if (s.score < RELEVANCE_MIN) {
         console.warn(`[brain-dump] dropped card (relevance ${s.score}: ${s.reason ?? ""}): ${card.title}`);
@@ -517,11 +562,20 @@ Return ONLY JSON: {"scores":[{"i":0,"score":4,"reason":"few words"}, ...]} with 
   } catch (err) {
     // Fail open, but loudly: a broken grader must not empty the feed.
     console.error("[brain-dump] relevance check failed, keeping all cards:", err);
+    for (const c of cards) {
+      c.graded = false;
+      delete c.relevance;
+    }
     return cards;
   }
 }
 
-export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
+/** Past this point a refresh skips the per-topic retries: they would push the grader
+ *  and the DB write past Vercel's 300s maxDuration (and then nothing is saved). */
+const RETRY_BUDGET_MS = 150_000;
+
+export async function fetchBrainDumpCards(): Promise<{ cards: BrainDumpCard[]; failedGroups: string[] }> {
+  const startedAt = Date.now();
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
@@ -558,7 +612,9 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
       let cards = clean(await searchCards(apiKey, prompt, start));
       // Most of a group's links can fail verification; one more search usually finds real ones.
       // Retry topic by topic: a narrower search returns real articles instead of nothing.
-      if (cards.length < 2) {
+      if (cards.length < 2 && Date.now() - startedAt > RETRY_BUDGET_MS) {
+        console.warn("[brain-dump] skipping per-topic retries: %ds elapsed", Math.round((Date.now() - startedAt) / 1000));
+      } else if (cards.length < 2) {
         const retries = await Promise.all(
           g.topics.map((t) =>
             searchCards(
@@ -585,6 +641,7 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
 
   const cards: BrainDumpCard[] = [];
   const failures: string[] = [];
+  const failedGroups: string[] = [];
   results.forEach((r, i) => {
     const label = groups[i].topics.map((t) => t.name).join(", ");
     if (r.status === "fulfilled") {
@@ -594,6 +651,7 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
       const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
       console.error("[brain-dump] group [%s] failed: %s", label, msg);
       failures.push(msg);
+      failedGroups.push(label);
     }
   });
 
@@ -618,10 +676,13 @@ export async function fetchBrainDumpCards(): Promise<BrainDumpCard[]> {
   // Interleave groups so the feed opens with a mix rather than one block per group.
   const interleaved = interleaveByTopic(relevant, topics);
 
-  return interleaved.map((card, i) => ({
-    ...card,
-    id: card.id || slugify(card.title) || `card-${i}`,
-  }));
+  return {
+    cards: interleaved.map((card, i) => ({
+      ...card,
+      id: card.id || slugify(card.title ?? "") || `card-${i}`,
+    })),
+    failedGroups,
+  };
 }
 
 /** Round-robin across canonical topics so neighbouring cards differ. */
@@ -666,6 +727,7 @@ export async function getOpenIssues(): Promise<OpenIssue[]> {
     where: {
       // Show the same issues as the Create tab (exclude only published editions)
       publishedAt: null,
+      dismissedAt: null,
     },
     select: {
       id: true,
@@ -699,10 +761,14 @@ export async function getCachedBrainDump(): Promise<{
     where: { id: "singleton" },
   });
   if (!cache) return { cards: [], fetchedAt: null };
-  return {
-    cards: JSON.parse(cache.cards) as BrainDumpCard[],
-    fetchedAt: cache.fetchedAt,
-  };
+  let cards: BrainDumpCard[] = [];
+  try {
+    const parsed = JSON.parse(cache.cards);
+    cards = Array.isArray(parsed) ? (parsed as BrainDumpCard[]) : [];
+  } catch (err) {
+    console.error("[brain-dump] cache JSON is corrupt, showing an empty feed:", err);
+  }
+  return { cards, fetchedAt: cache.fetchedAt };
 }
 
 // ─── Topic balancing (the hard cap that actually curbs AI dominance) ─────────
@@ -765,7 +831,36 @@ function isRelevantSource(url: string): boolean {
  *  - Same week as last fetch → appends new cards on top (content dedup, cap 50)
  *  - New week → resets the cache with only the fresh cards
  */
-export async function refreshBrainDump(): Promise<void> {
+export type RefreshBrainDumpResult = {
+  ok: boolean;
+  /** Blocking: nothing was saved; the previous feed is still shown. */
+  error?: string;
+  /** Non-blocking: cards were saved, but something is missing (e.g. a topic group failed). */
+  warning?: string;
+};
+
+/** Same-week cached cards worth keeping: link-verified, and either graded ≥ RELEVANCE_MIN
+ *  or explicitly left ungraded by a skipped/failed grader. Cards cached before the
+ *  relevance gate have no `graded` field and are purged (they were never judged). */
+function keepCachedCard(c: BrainDumpCard): boolean {
+  if (!c.verified || c.graded === undefined) return false;
+  if (c.graded === false) return true;
+  return (c.relevance ?? 0) >= RELEVANCE_MIN;
+}
+
+export async function refreshBrainDump(): Promise<RefreshBrainDumpResult> {
+  try {
+    return await refreshBrainDumpInner();
+  } catch (err) {
+    console.error("[brain-dump] refresh failed:", err);
+    return {
+      ok: false,
+      error: `Refresh failed: ${err instanceof Error ? err.message : String(err)}. The previous stories are still shown.`,
+    };
+  }
+}
+
+async function refreshBrainDumpInner(): Promise<RefreshBrainDumpResult> {
   const { start: currentWindowStart } = getEditionWindow();
 
   // Decide whether to append or reset based on week boundary
@@ -774,15 +869,29 @@ export async function refreshBrainDump(): Promise<void> {
   if (existing.fetchedAt) {
     const { start: cachedWindowStart } = getEditionWindowForDate(new Date(existing.fetchedAt));
     if (cachedWindowStart.getTime() === currentWindowStart.getTime()) {
-      // same week → keep, except cards from before link verification existed
-      // (those include invented URLs and old stories).
-      existingCards = existing.cards.filter((c) => c.verified && (c.relevance ?? 0) >= RELEVANCE_MIN);
+      // same week → keep verified + relevant cards; drop pre-verification/pre-gate ones.
+      existingCards = existing.cards.filter(keepCachedCard);
     }
     // different week → existingCards stays empty (reset)
   }
 
   // Fetch and filter new cards
-  const newCards = (await fetchBrainDumpCards()).filter((c) => isRelevantSource(c.url));
+  const { cards: fetched, failedGroups } = await fetchBrainDumpCards();
+  const newCards = fetched.filter((c) => isRelevantSource(c.url));
+  const warning = failedGroups.length
+    ? `Some topic searches failed and are missing from this refresh: ${failedGroups.join("; ")}.`
+    : undefined;
+
+  // Nothing new survived verification/grading: keep the old cache as is (a reset to an
+  // empty feed, or silently dropping stale-format cards, is worse than showing last results).
+  if (newCards.length === 0) {
+    return {
+      ok: false,
+      error:
+        "The search found no new stories that passed link and relevance checks. The previous stories are still shown — try again later." +
+        (warning ? ` ${warning}` : ""),
+    };
+  }
 
   // Merge: new on top, then collapse near-duplicate stories by CONTENT (not URL).
   // GPT's web search surfaces the same story from different aggregator URLs, so
@@ -798,6 +907,7 @@ export async function refreshBrainDump(): Promise<void> {
     update: { cards: JSON.stringify(merged), fetchedAt: new Date() },
   });
   revalidatePath("/brain-dump");
+  return { ok: true, warning };
 }
 
 // ─── Content-level dedup ─────────────────────────────────────────────────────

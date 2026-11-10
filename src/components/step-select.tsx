@@ -42,6 +42,24 @@ export function StepSelect({ issueId, links }: Props) {
   const [selectedGroupKeys, setSelectedGroupKeys] = useState<Set<string>>(initialSelected);
   const [saving, setSaving] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveAndContinue(selectedIds: string[]) {
+    setSaving(true);
+    setError(null);
+    try {
+      await selectFinalLinks(issueId, selectedIds);
+      await setIssueStep(issueId, "generate");
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not save your selection. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function toggleSubject(groupKey: string) {
     const next = new Set(selectedGroupKeys);
@@ -60,21 +78,19 @@ export function StepSelect({ issueId, links }: Props) {
   }
 
   async function handleConfirm() {
-    setSaving(true);
-    try {
-      // Collect all link IDs from selected subject groups
-      const selectedIds: string[] = [];
-      for (const [groupKey, groupLinks] of subjectGroups) {
-        if (selectedGroupKeys.has(groupKey)) {
-          selectedIds.push(...groupLinks.map((l) => l.id));
-        }
+    // Collect all link IDs from selected subject groups
+    const selectedIds: string[] = [];
+    for (const [groupKey, groupLinks] of subjectGroups) {
+      if (selectedGroupKeys.has(groupKey)) {
+        selectedIds.push(...groupLinks.map((l) => l.id));
       }
-      await selectFinalLinks(issueId, selectedIds);
-      await setIssueStep(issueId, "generate");
-    } finally {
-      setSaving(false);
     }
+    await saveAndContinue(selectedIds);
   }
+
+  const errorMessage = error && (
+    <p className="text-sm text-destructive">{error}</p>
+  );
 
   // If 3 or fewer subjects, auto-advance
   if (subjectGroups.length <= 3) {
@@ -92,17 +108,18 @@ export function StepSelect({ issueId, links }: Props) {
             Back
           </Button>
           <Button
-            onClick={async () => {
-              await selectFinalLinks(
-                issueId,
-                links.map((l) => l.id)
-              );
-              await setIssueStep(issueId, "generate");
-            }}
+            onClick={() => saveAndContinue(links.map((l) => l.id))}
+            disabled={saving || links.length === 0}
           >
-            Use All and Continue
+            {saving ? "Saving..." : "Use All and Continue"}
           </Button>
         </div>
+        {links.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Add at least one subject in the Links step first.
+          </p>
+        )}
+        {errorMessage}
       </div>
     );
   }
@@ -201,6 +218,7 @@ export function StepSelect({ issueId, links }: Props) {
             Select {3 - selectedGroupKeys.size} more subject{3 - selectedGroupKeys.size !== 1 ? "s" : ""} to continue (exactly 3 required).
           </p>
         )}
+        {errorMessage}
       </div>
     </div>
   );

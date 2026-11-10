@@ -84,6 +84,9 @@ export interface BrainDumpCard {
   verified?: boolean;
   /** 1-5 fit with the topics + editorial filter (relevance gate). Older cards lack it. */
   relevance?: number;
+  /** true = the relevance grader scored it; false = grader skipped/failed (kept, ungraded).
+   *  Absent on cards cached before the relevance gate existed. */
+  graded?: boolean;
   whyItMatters: string; // 2-3 sentences on strategic significance
   robertosAngle: string; // how Roberto would frame this story
   keyFacts: string[]; // 3 bullet points

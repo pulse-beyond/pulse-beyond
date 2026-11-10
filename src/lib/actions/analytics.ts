@@ -373,7 +373,13 @@ export async function uploadLinkedInExcel(
     for (const f of files) {
       const arrayBuffer = await f.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      parsedList.push(parseLinkedInExcel(buffer));
+      const parsedFile = parseLinkedInExcel(buffer);
+      if (parsedFile.dailyMetrics.length === 0) {
+        return {
+          error: `Arquivo "${f.name}" não tem uma aba de engajamento (ENGAGEMENT/Engajamento) com datas válidas. Nada foi importado — confira se é o export de analytics do LinkedIn.`,
+        };
+      }
+      parsedList.push(parsedFile);
     }
 
     // Merge all parsed results into one

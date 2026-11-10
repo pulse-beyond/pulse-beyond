@@ -5,6 +5,45 @@ import { ImageIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { uploadNewsletterScreenshot } from "@/lib/actions/analytics";
 
+
+// Vercel rejects request bodies over 4.5MB and the vision API rejects images over ~5MB
+// in base64 (~3.75MB raw). Keep uploads safely under both.
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+}
+
+/** Returns the file unchanged if small enough; otherwise re-encodes as JPEG, shrinking until < MAX_UPLOAD_BYTES. */
+async function shrinkImage(file: File): Promise<File> {
+  if (file.size <= MAX_UPLOAD_BYTES) return file;
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    let maxDim = 2400;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas indisponível neste navegador.");
+      ctx.fillStyle = "#ffffff"; // JPEG has no alpha — avoid black background on transparent PNGs
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasToBlob(canvas, 0.85);
+      if (blob && blob.size <= MAX_UPLOAD_BYTES) {
+        const base = file.name.replace(/\.[^.]+$/, "") || "screenshot";
+        return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+      }
+      maxDim = Math.round(maxDim * 0.75);
+    }
+  } finally {
+    bitmap.close();
+  }
+  throw new Error("Não foi possível reduzir a imagem para menos de 3MB. Recorte o screenshot só na área dos números e tente de novo.");
+}
+
 export function NewsletterUploadButton() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -20,8 +59,17 @@ export function NewsletterUploadButton() {
     setErrorMsg(null);
 
     try {
+      let toSend: File;
+      try {
+        toSend = await shrinkImage(file);
+      } catch (err) {
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Não foi possível processar a imagem.");
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", toSend);
       const result = await uploadNewsletterScreenshot(formData);
 
       if (result?.error) {
@@ -33,7 +81,7 @@ export function NewsletterUploadButton() {
       }
     } catch {
       setStatus("error");
-      setErrorMsg("Erro inesperado. Tente novamente.");
+      setErrorMsg("Falha no envio (imagem grande demais, sessão expirada ou erro de rede). Recarregue a página e tente novamente.");
     } finally {
       setLoading(false);
       if (inputRef.current) inputRef.current.value = "";

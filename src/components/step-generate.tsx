@@ -119,7 +119,13 @@ export function StepGenerate({ issueId, sections, links }: Props) {
     try {
       const result = await generateDraft(issueId);
       if (result && result.errors && result.errors.length > 0) {
-        setError(`Generated ${result.generated}/${result.total} topics. Errors: ${result.errors.join("; ")}`);
+        const kept =
+          result.generated === 0 && sections.length > 0
+            ? " Your previous draft was kept unchanged."
+            : "";
+        setError(
+          `Generated ${result.generated}/${result.total} topics.${kept} Errors: ${result.errors.join("; ")}`
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
@@ -228,6 +234,7 @@ function SectionEditor({
   const [myThoughts, setMyThoughts] = useState(content.myThoughts);
   const [customTitle, setCustomTitle] = useState(content.customTitle || "");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const isCustomSelected = content.selectedTitle === "__custom__";
   const hasChanges =
@@ -243,8 +250,16 @@ function SectionEditor({
       myThoughts,
       customTitle: customTitle || undefined,
     };
-    await updateSectionContent(section.id, JSON.stringify(updated));
-    setSaving(false);
+    setSaveError(null);
+    try {
+      await updateSectionContent(section.id, JSON.stringify(updated));
+    } catch (e) {
+      setSaveError(
+        e instanceof Error ? e.message : "Could not save changes. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -373,6 +388,9 @@ function SectionEditor({
           <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
           </Button>
+        )}
+        {saveError && (
+          <p className="text-sm text-destructive">{saveError}</p>
         )}
       </CardContent>
     </Card>

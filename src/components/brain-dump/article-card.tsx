@@ -24,7 +24,8 @@ const SOURCE_COLORS: Record<string, string> = {
   "Atlantic Council": "bg-cyan-100 text-cyan-800",
 };
 
-function getSourceColor(source: string): string {
+function getSourceColor(source: string | undefined): string {
+  if (!source) return "bg-secondary text-secondary-foreground";
   // Exact match first
   if (SOURCE_COLORS[source]) return SOURCE_COLORS[source];
   // Partial match
@@ -139,10 +140,10 @@ export function ArticleCard({ card, openIssues }: ArticleCardProps) {
               getSourceColor(card.source)
             )}
           >
-            {card.source}
+            {card.source || "Unknown source"}
           </span>
           <div className="flex gap-1 flex-wrap justify-end">
-            {card.topicTags.slice(0, 2).map((tag) => (
+            {(Array.isArray(card.topicTags) ? card.topicTags : []).slice(0, 2).map((tag) => (
               <span
                 key={tag}
                 className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
@@ -159,12 +160,14 @@ export function ArticleCard({ card, openIssues }: ArticleCardProps) {
         </h3>
 
         {/* Why it matters */}
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-          {card.whyItMatters}
-        </p>
+        {card.whyItMatters && (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {card.whyItMatters}
+          </p>
+        )}
 
         {/* Key Facts */}
-        {card.keyFacts && card.keyFacts.length > 0 && (
+        {Array.isArray(card.keyFacts) && card.keyFacts.length > 0 && (
           <ul className="space-y-1">
             {card.keyFacts.map((fact, i) => (
               <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/80">

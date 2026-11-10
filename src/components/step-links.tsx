@@ -19,6 +19,7 @@ export function StepLinks({ issueId, links }: Props) {
   const [urlFields, setUrlFields] = useState<string[]>([""]);
   const [toneNote, setToneNote] = useState("");
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   function updateUrlField(index: number, value: string) {
     setUrlFields((prev) => {
@@ -45,14 +46,24 @@ export function StepLinks({ issueId, links }: Props) {
       .filter((u) => u.length > 0 && (u.startsWith("http://") || u.startsWith("https://")));
     if (urlList.length === 0) return;
     setAdding(true);
+    setAddError(null);
     // All URLs in this batch share one subject group
     const groupId = crypto.randomUUID();
+    let added = 0;
     try {
       for (const url of urlList) {
         await addLink(issueId, url, toneNote.trim() || undefined, groupId);
+        added++;
       }
       setUrlFields([""]);
       setToneNote("");
+    } catch (e) {
+      // Keep only the URLs that were not saved, so a retry doesn't duplicate them.
+      setUrlFields(urlList.slice(added));
+      setAddError(
+        `Could not add ${urlList.length - added} of ${urlList.length} URL${urlList.length !== 1 ? "s" : ""}` +
+          (e instanceof Error && e.message ? `: ${e.message}` : ". Please try again.")
+      );
     } finally {
       setAdding(false);
     }
@@ -142,6 +153,9 @@ export function StepLinks({ issueId, links }: Props) {
               ? `Add ${urlCount} sources as 1 subject`
               : "Add subject"}
           </Button>
+          {addError && (
+            <p className="text-xs text-destructive">{addError}</p>
+          )}
         </CardContent>
       </Card>
 
@@ -213,6 +227,7 @@ function SubjectGroupCard({
   const [addingUrl, setAddingUrl] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [savingUrl, setSavingUrl] = useState(false);
+  const [addUrlError, setAddUrlError] = useState<string | null>(null);
   const [micError, setMicError] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -234,12 +249,18 @@ function SubjectGroupCard({
 
   async function handleAddUrl() {
     const trimmed = newUrl.trim();
+    if (savingUrl) return; // Enter pressed again while the first add is in flight
     if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://"))) return;
     setSavingUrl(true);
+    setAddUrlError(null);
     try {
       await addLink(issueId, trimmed, primaryLink.toneNote || undefined, groupKey);
       setNewUrl("");
       setAddingUrl(false);
+    } catch (e) {
+      setAddUrlError(
+        e instanceof Error && e.message ? e.message : "Could not add the URL. Please try again."
+      );
     } finally {
       setSavingUrl(false);
     }
@@ -493,11 +514,14 @@ function SubjectGroupCard({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => { setAddingUrl(false); setNewUrl(""); }}
+                onClick={() => { setAddingUrl(false); setNewUrl(""); setAddUrlError(null); }}
               >
                 Cancel
               </Button>
             </div>
+          )}
+          {addUrlError && (
+            <p className="text-xs text-destructive mt-1">{addUrlError}</p>
           )}
         </div>
       </CardContent>

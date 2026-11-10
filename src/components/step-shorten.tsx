@@ -16,6 +16,7 @@ interface Props {
 
 export function StepShorten({ issueId, links, events }: Props) {
   const [shortening, setShortening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const allShortened =
     links.every((l) => l.shortUrl) &&
@@ -23,8 +24,15 @@ export function StepShorten({ issueId, links, events }: Props) {
 
   async function handleShorten() {
     setShortening(true);
+    setError(null);
     try {
       await shortenAllLinks(issueId);
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not shorten the links. Please try again."
+      );
     } finally {
       setShortening(false);
     }
@@ -52,6 +60,8 @@ export function StepShorten({ issueId, links, events }: Props) {
           ? "Re-shorten All"
           : "Shorten All Links"}
       </Button>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Link preview */}
       <div className="space-y-4">

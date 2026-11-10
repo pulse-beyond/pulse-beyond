@@ -56,6 +56,50 @@ async function scrapeControlRisksCalendar(): Promise<string> {
   }
 }
 
+// The event prompts live in src/lib/ai/*-provider.ts; every provider appends
+// calendarContext to its prompt, so this rule rides along with it.
+const SOURCE_URL_RULE = `IMPORTANT rule for sourceUrl: it must be the event's OWN official page (the organizer's page, or a news article about that specific event). Never use an events listing, calendar, aggregator or directory page (e.g. a URL ending in /events/ or /calendar/), and never give the same sourceUrl to two different events. If you cannot find the event's own page, leave sourceUrl empty.`;
+
+/** Path segments that mark a listing/aggregator page rather than a single event. */
+const LISTING_SEGMENT_RE =
+  /^(events?|calendar|calendars|agenda|upcoming(-events)?|event-calendar|events-calendar|conferences|whats-on|schedule)$/i;
+
+/** True if the URL looks like a listing page: no path, or a path that ends in /events/ etc. */
+function looksLikeListingPage(raw: string): boolean {
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const segments = u.pathname.split("/").filter(Boolean);
+    if (segments.length === 0) return true; // bare homepage
+    return LISTING_SEGMENT_RE.test(segments[segments.length - 1]);
+  } catch {
+    return true; // unparseable → not a usable source
+  }
+}
+
+function normalizeUrl(raw: string): string {
+  return raw.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "");
+}
+
+/** Drop sourceUrls that are shared by 2+ events or point at a listing page. */
+function cleanSourceUrls<T extends { sourceUrl?: string }>(events: T[]): T[] {
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    if (e.sourceUrl) {
+      const key = normalizeUrl(e.sourceUrl);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return events.map((e) => {
+    if (!e.sourceUrl) return e;
+    const shared = (counts.get(normalizeUrl(e.sourceUrl)) ?? 0) > 1;
+    if (shared || looksLikeListingPage(e.sourceUrl)) {
+      console.warn("[fetchUpcomingEvents] dropping non-specific sourceUrl:", e.sourceUrl);
+      return { ...e, sourceUrl: undefined };
+    }
+    return e;
+  });
+}
+
 /** Auto-fetch upcoming events for an issue's week */
 export async function fetchUpcomingEvents(issueId: string) {
   const ai = getAIProvider();
@@ -88,11 +132,12 @@ export async function fetchUpcomingEvents(issueId: string) {
   const calendarContext = await scrapeControlRisksCalendar();
 
   // Generate events using AI
-  const events = await ai.generateUpcomingEvents({
+  const rawEvents = await ai.generateUpcomingEvents({
     weekStartDate,
     weekEndDate,
-    calendarContext: calendarContext || undefined,
+    calendarContext: [calendarContext, SOURCE_URL_RULE].filter(Boolean).join("\n\n"),
   });
+  const events = cleanSourceUrls(rawEvents);
 
   // Clear existing events for this issue before adding new ones
   await prisma.eventItem.deleteMany({ where: { issueId } });

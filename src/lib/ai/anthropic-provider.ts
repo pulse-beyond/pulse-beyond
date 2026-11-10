@@ -235,7 +235,7 @@ RULES:
 - Descriptions should be provocative questions, not statements
 - No em dashes (use commas or periods instead)
 - Sort events by date
-- sourceUrl MUST be a real URL from your web search results where the user can verify the event. Every event must have a sourceUrl.
+- sourceUrl MUST be a real URL from your web search results: the event's OWN official page (or a news article about that specific event). Never an events calendar, listing or aggregator page shared by several events. If you only found the event on a listing page, leave sourceUrl empty.
 - Return ONLY the JSON object, no other text.`;
 
     try {

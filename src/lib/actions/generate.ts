@@ -35,14 +35,10 @@ export async function generateDraft(issueId: string) {
   }
   const subjects = Array.from(subjectMap.values());
 
-  // Clear any existing main sections for this issue
-  await prisma.generatedSection.deleteMany({
-    where: { issueId, sectionType: "main" },
-  });
-
-  // Generate one section per subject
+  // Generate one section per subject. Existing sections (and the cover image that
+  // cascades from them) are only replaced once every new section is in hand.
   const errors: string[] = [];
-  let generated = 0;
+  const drafts: { linkItemId: string; content: string; order: number }[] = [];
 
   for (let i = 0; i < subjects.length; i++) {
     const groupLinks = subjects[i];
@@ -77,16 +73,11 @@ export async function generateDraft(issueId: string) {
         myThoughts: draft.myThoughts,
       };
 
-      await prisma.generatedSection.create({
-        data: {
-          issueId,
-          linkItemId: primaryLink.id,
-          sectionType: "main",
-          content: JSON.stringify(content),
-          order: i,
-        },
+      drafts.push({
+        linkItemId: primaryLink.id,
+        content: JSON.stringify(content),
+        order: i,
       });
-      generated++;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       console.error(`Failed to generate section for subject ${i + 1}:`, msg);
@@ -94,8 +85,29 @@ export async function generateDraft(issueId: string) {
     }
   }
 
+  // Swap only if every subject succeeded, so a partial failure never destroys a
+  // previous draft. With no previous draft, keep whatever did succeed.
+  const existingCount = await prisma.generatedSection.count({
+    where: { issueId, sectionType: "main" },
+  });
+  const swap = drafts.length > 0 && (errors.length === 0 || existingCount === 0);
+  if (swap) {
+    await prisma.$transaction([
+      prisma.generatedSection.deleteMany({
+        where: { issueId, sectionType: "main" },
+      }),
+      prisma.generatedSection.createMany({
+        data: drafts.map((d) => ({ issueId, sectionType: "main", ...d })),
+      }),
+    ]);
+  }
+
   revalidatePath(`/issues/${issueId}`);
-  return { generated, total: subjects.length, errors };
+  return {
+    generated: swap ? drafts.length : 0,
+    total: subjects.length,
+    errors,
+  };
 }
 
 /** Update a generated section's edited content */

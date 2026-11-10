@@ -35,8 +35,14 @@ function EditionDropdown({ openIssues, url, onAdded }: EditionDropdownProps) {
 
   async function handleSelect(issueId: string) {
     setLoading(issueId);
-    const result = await addBacklogItemToEdition(url, issueId);
-    setLoading(null);
+    let result: { success: boolean; error?: string };
+    try {
+      result = await addBacklogItemToEdition(url, issueId);
+    } catch (err) {
+      result = { success: false, error: err instanceof Error ? err.message : "request failed" };
+    } finally {
+      setLoading(null);
+    }
     if (result.success) {
       onAdded();
       setOpen(false);
@@ -98,6 +104,22 @@ interface BacklogCardProps {
 function BacklogCard({ item, openIssues }: BacklogCardProps) {
   const [added, setAdded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await deleteBacklogItem(item.id);
+      if (res.error) setDeleteError(res.error);
+    } catch (err) {
+      console.error("Failed to delete backlog item:", err);
+      setDeleteError("Could not delete. Try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const domain = (() => {
     try { return new URL(item.url).hostname.replace(/^www\./, ""); }
@@ -152,14 +174,16 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
                 size="sm"
                 variant="destructive"
                 className="h-6 text-xs"
-                onClick={() => deleteBacklogItem(item.id)}
+                disabled={deleting}
+                onClick={handleDelete}
               >
-                Confirm
+                {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-6 text-xs"
+                disabled={deleting}
                 onClick={() => setConfirmingDelete(false)}
               >
                 Cancel
@@ -174,6 +198,7 @@ function BacklogCard({ item, openIssues }: BacklogCardProps) {
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
+          {deleteError && <span className="text-[11px] text-destructive">{deleteError}</span>}
         </div>
 
         <div className="flex items-center gap-2">
@@ -235,13 +260,19 @@ function AddBacklogForm({ openIssues }: { openIssues: OpenIssue[] }) {
     if (!trimmedUrl) return;
     setLoading(true);
     setError(null);
-    const result = await addBacklogItem(trimmedUrl, note || undefined, issueId || undefined);
-    setLoading(false);
-    if (result.error) {
-      setError(result.error);
-    } else {
-      setUrl("");
-      setNote("");
+    try {
+      const result = await addBacklogItem(trimmedUrl, note || undefined, issueId || undefined);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setUrl("");
+        setNote("");
+      }
+    } catch (err) {
+      console.error("Failed to save backlog item:", err);
+      setError("Could not save. Try again.");
+    } finally {
+      setLoading(false);
     }
   }
 

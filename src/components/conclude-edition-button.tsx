@@ -37,9 +37,12 @@ export function ConcludeEditionButton({
       await markAsPublished(issueId);
       router.push("/past-editions");
     } catch (e) {
+      console.error("markAsPublished failed:", e);
       setLoading(false);
       setConfirming(false);
-      setError(e instanceof Error ? e.message : "Could not mark as published.");
+      // Server action errors arrive with opaque/redacted messages in production
+      // (or as a redirect to /login if the session expired), so show a clear message.
+      setError("Could not mark as published. Reload the page (you may need to sign in again) and try again.");
     }
   }
 
