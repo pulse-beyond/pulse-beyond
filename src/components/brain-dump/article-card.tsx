@@ -132,21 +132,25 @@ export function ArticleCard({ card, openIssues }: ArticleCardProps) {
     <article className="rounded-xl border bg-card flex flex-col gap-0 hover:shadow-sm transition-shadow">
       {/* Card body */}
       <div className="p-5 flex flex-col gap-3 flex-1">
-        {/* Source badge + topic tags */}
-        <div className="flex items-start justify-between gap-2">
+        {/* Source on its own line, then up to two tags on one line below it.
+            Both rows are single-line (long text truncates), so every card's header
+            has the same height and the titles line up across the grid. */}
+        <div className="flex flex-col gap-1.5">
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold shrink-0",
+              "self-start max-w-full truncate rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
               getSourceColor(card.source)
             )}
+            title={card.source || undefined}
           >
             {card.source || "Unknown source"}
           </span>
-          <div className="flex gap-1 flex-wrap justify-end">
+          <div className="flex gap-1 h-5 min-w-0 overflow-hidden">
             {(Array.isArray(card.topicTags) ? card.topicTags : []).slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title={tag}
+                className="min-w-0 shrink truncate whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
               >
                 {tag}
               </span>
