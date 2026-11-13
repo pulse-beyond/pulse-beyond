@@ -283,6 +283,9 @@ function looksLikeArticle(raw: string, inSearchResults = false): boolean {
     // articles end in a long slug or carry an id/date number somewhere in the path.
     const last = segs[segs.length - 1].replace(/\.(html?|php|aspx?)$/i, "");
     const words = last.split(/[-_]+/).filter(Boolean).length;
+    // Listing pages with long slugs: "/latest-news-research-and-innovation?l=100", "/press-releases".
+    if (/^(latest|all|recent|more)[-_]|^(news|press)[-_](room|releases)$/i.test(last)) return false;
+    if (/[?&](page|l|limit|offset|p)=\d+/i.test(u.search)) return false;
     const hasId = /\d{4,}/.test(u.pathname); // id or date anywhere in the path
     if (inSearchResults && words >= 3) return true;
     return words >= 5 || hasId || (words >= 3 && segs.length >= 3);
@@ -922,7 +925,18 @@ async function refreshBrainDumpInner(): Promise<RefreshBrainDumpResult> {
   // page) legitimately backs several distinct cards, so URL dedup would wrongly
   // merge those. Content similarity handles both. First occurrence wins → the
   // freshest phrasing of a repeated story is kept.
-  const merged = dedupeByContent([...newCards, ...existingCards]).slice(0, CARD_CAP);
+  // Same adaptive bar as the grader, across the merged pool: once there are enough
+  // 4-5 cards, earlier 3s (kept when that refresh was thin) drop out.
+  const pool = dedupeByContent([
+    ...newCards,
+    ...existingCards.filter((c) => looksLikeArticle(c.url, true)), // rules may have tightened since
+  ]);
+  const strongCount = pool.filter((c) => (c.relevance ?? 0) >= RELEVANCE_MIN + 1).length;
+  const merged = (
+    strongCount >= RELEVANCE_FILL_IF_FEWER_THAN
+      ? pool.filter((c) => c.graded === false || (c.relevance ?? 0) >= RELEVANCE_MIN + 1)
+      : pool
+  ).slice(0, CARD_CAP);
 
   await prisma.brainDumpCache.upsert({
     where: { id: "singleton" },
