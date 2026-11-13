@@ -129,6 +129,9 @@ function getEditionWindowForDate(date: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
+/** How far back the web search looks (rolling, independent of the edition week). */
+const SEARCH_WINDOW_DAYS = 7;
+
 function getEditionWindow(): { start: Date; end: Date } {
   return getEditionWindowForDate(new Date());
 }
@@ -221,6 +224,7 @@ LINKS — THIS IS CRITICAL:
 TOPIC FIT — THIS IS CRITICAL:
 - Every story must clearly fall under one focus topic AS DESCRIBED above (its sub-themes), not merely touch the topic's name.
 - It must pass the editorial filter: a strategic signal with consequences beyond the story itself.
+- Skip announcements or promos for events, conferences, webinars and summits; monthly roundups; city news.
 - Skip local curiosities, single product launches or redesigns, a single species found somewhere, routine corporate news,
   lifestyle pieces and listicles — unless the article itself shows a structural shift.
 - Fewer stories that fit beat more stories that don't.
@@ -302,12 +306,18 @@ function urlDateTooOld(raw: string, start: Date): boolean {
 /** "2 weeks ago", "3 months ago", "last year"... is outside a weekly window. */
 function publishedTooLongAgo(publishedAt: string | undefined): boolean {
   if (!publishedAt) return false;
+  // Absolute dates ("October 13, 2026", "2026-10-13") — the model sometimes writes those.
+  // Only full dates with a day; "Nov 2026" alone would parse as the 1st and drop fresh stories.
+  if (/\d{4}-\d{2}-\d{2}|[a-z]+\.? \d{1,2},? \d{4}|\d{1,2} [a-z]+\.? \d{4}/i.test(publishedAt)) {
+    const t = Date.parse(publishedAt);
+    if (!isNaN(t)) return t < Date.now() - (SEARCH_WINDOW_DAYS + 1) * 86_400_000;
+  }
   const p = publishedAt.toLowerCase();
   if (/\b(month|months|year|years)\b/.test(p)) return true;
   const weeks = p.match(/(\d+)\s*weeks?/);
   if (weeks && Number(weeks[1]) >= 2) return true;
   const days = p.match(/(\d+)\s*days?/);
-  return !!days && Number(days[1]) > 10;
+  return !!days && Number(days[1]) > SEARCH_WINDOW_DAYS;
 }
 
 /**
@@ -494,6 +504,8 @@ async function searchCards(apiKey: string, prompt: string, start: Date): Promise
 // with Roberto's topics + editorial filter; keep RELEVANCE_MIN and up.
 
 const RELEVANCE_MIN = 3;
+/** With at least this many 4-5 cards, 3s are dropped too. */
+const RELEVANCE_FILL_IF_FEWER_THAN = 10;
 
 async function keepRelevantCards(
   apiKey: string,
@@ -511,11 +523,16 @@ about science and technology and their geopolitical and economic consequences.
 The editor's topics (a story must fit one AS DESCRIBED):
 ${topicList}
 
+Judge fit against the topic's DESCRIPTION, not its name: a story only matches "Nature" if it is about the
+sub-themes listed for Nature, not because it involves the natural world in general. If a story fits no
+topic's description, score it 2 at most, whatever label it was given.
+
 Score each story from 1 to 5:
 5 = squarely in a topic, clear strategic signal (power, markets, sovereignty, structural shift)
 4 = fits a topic well, meaningful consequences
 3 = fits a topic, modest but real significance
-2 = loosely related, or trivial (local curiosity, single product or redesign, routine corporate news, lifestyle)
+2 = loosely related, or trivial (local curiosity or city news, single product or redesign, routine corporate news,
+    lifestyle, an announcement or promo for an event/conference/webinar/summit, a monthly roundup or report index)
 1 = off-topic
 
 Stories:
@@ -543,6 +560,9 @@ Return ONLY JSON: {"scores":[{"i":0,"score":4,"reason":"few words"}, ...]} with 
     for (const s of parsed.scores ?? []) {
       if (typeof s?.i === "number" && typeof s?.score === "number") scores.set(s.i, s);
     }
+    // 3s ("fits, modest significance") only fill in when the week is thin.
+    const strong = cards.filter((_, i) => (scores.get(i)?.score ?? 0) >= 4).length;
+    const minScore = strong >= RELEVANCE_FILL_IF_FEWER_THAN ? RELEVANCE_MIN + 1 : RELEVANCE_MIN;
     return cards.filter((card, i) => {
       const s = scores.get(i);
       if (!s) {
@@ -553,7 +573,7 @@ Return ONLY JSON: {"scores":[{"i":0,"score":4,"reason":"few words"}, ...]} with 
       }
       card.graded = true;
       card.relevance = s.score;
-      if (s.score < RELEVANCE_MIN) {
+      if (s.score < minScore) {
         console.warn(`[brain-dump] dropped card (relevance ${s.score}: ${s.reason ?? ""}): ${card.title}`);
         return false;
       }
@@ -588,7 +608,10 @@ export async function fetchBrainDumpCards(): Promise<{ cards: BrainDumpCard[]; f
     day: "numeric",
   });
 
-  const { start, end } = getEditionWindow();
+  // Search the last 7 days, not the edition week: on Friday the week starts over and
+  // "this week" holds one day of news, so the model fell back to undated older stories.
+  const end = new Date();
+  const start = new Date(end.getTime() - SEARCH_WINDOW_DAYS * 86_400_000);
   const startStr = formatDateLong(start);
   const endStr = formatDateLong(end);
 
